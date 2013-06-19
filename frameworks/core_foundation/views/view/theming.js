@@ -25,7 +25,7 @@ SC.View.reopen(
 
     Example: themeName: 'ace'
 
-    @property {String}
+    @type String
   */
   themeName: null,
 
@@ -37,7 +37,7 @@ SC.View.reopen(
     This property is private for the time being.
 
     @private
-    @property {String}
+    @type String
   */
   baseThemeName: null,
 
@@ -138,7 +138,7 @@ SC.View.reopen(
 
     You can also set the render delegate by using the 'renderDelegateName' property.
 
-    @property {Object}
+    @type Object
   */
   renderDelegate: function(key, value) {
     if (value) { this._setRenderDelegate = value; }
@@ -152,7 +152,7 @@ SC.View.reopen(
     if (renderDelegateName) {
       renderDelegate = this.get('theme')[renderDelegateName];
       if (!renderDelegate) {
-        throw "%@: Unable to locate render delegate \"%@\" in theme.".fmt(this, renderDelegateName);
+        throw new Error("%@: Unable to locate render delegate \"%@\" in theme.".fmt(this, renderDelegateName));
       }
 
       return renderDelegate;
@@ -239,14 +239,34 @@ SC.View.reopen(
     if (renderDelegate && renderDelegate.className) {
       context.addClass(renderDelegate.className);
     }
-    
+
     // @if(debug)
     if (renderDelegate && renderDelegate.name) {
       SC.Logger.error("Render delegates now use 'className' instead of 'name'.");
       SC.Logger.error("Name '%@' will be ignored.", renderDelegate.name);
     }
     // @endif
-  }.enhance()
+  }.enhance(),
+
+
+  /**
+    Invokes a method on the render delegate, if one is present and it implements
+    that method.
+
+    @param {String} method The name of the method to call.
+    @param arg One or more arguments.
+  */
+  invokeRenderDelegateMethod: function(method, args) {
+    var renderDelegate = this.get('renderDelegate');
+    if (!renderDelegate) return undefined;
+
+    if (SC.typeOf(renderDelegate[method]) !== SC.T_FUNCTION) return undefined;
+
+    args = SC.$A(arguments);
+    args.shift();
+    args.unshift(this.get('renderDelegateProxy'));
+    return renderDelegate[method].apply(renderDelegate, args);
+  }
 });
 
 /**
@@ -254,9 +274,8 @@ SC.View.reopen(
   @private
   View Render Delegate Proxies are tool SC.Views use to:
 
-  a) limit properties the render delegate can access to the displayProperties
-  b) look up 'display*' ('displayTitle' instead of 'title') to help deal with
-     differences between the render delegate's API and the view's.
+  - look up 'display*' ('displayTitle' instead of 'title') to help deal with
+    differences between the render delegate's API and the view's.
 
   RenderDelegateProxies are fully valid data sources for render delegates. They
   act as proxies to the view, interpreting the .get and .didChangeFor commands
@@ -266,8 +285,10 @@ SC.View.reopen(
 */
 SC.View._RenderDelegateProxy = {
 
+  //@if(debug)
   // for testing:
   isViewRenderDelegateProxy: YES,
+  //@endif
 
   /**
     Creates a View Render Delegate Proxy for the specified view.
@@ -308,10 +329,6 @@ SC.View._RenderDelegateProxy = {
     for instance, if the render delegate asks for 'title', this will
     look for 'displayTitle' in the view's displayProperties array.
 
-    If the property is not in `displayProperties`, but a property
-    is defined on the view, an error will be thrown to assist in
-    debugging.
-
    @param {String} property The name of the property the render delegate needs.
    @returns The value.
   */
@@ -322,11 +339,9 @@ SC.View._RenderDelegateProxy = {
 
     if (this._displayPropertiesLookup[displayProperty]) {
       return this._view.get(displayProperty);
-    } else if (this._displayPropertiesLookup[property]) {
+    } else {
       return this._view.get(property);
     }
-
-    return undefined;
   },
 
   /**
@@ -344,7 +359,7 @@ SC.View._RenderDelegateProxy = {
 
       if (this._displayPropertiesLookup[displayProperty]) {
         if (this._view.didChangeFor(context, displayProperty)) { return YES; }
-      } else if (this._displayPropertiesLookup[property]) {
+      } else {
         if (this._view.didChangeFor(context, property)) { return YES; }
       }
     }
@@ -357,9 +372,9 @@ SC.View._RenderDelegateProxy = {
   Generates a computed property that will look up the specified property from
   the view's render delegate, if present. You may specify a default value to
   return if there is no such property or is no render delegate.
-  
-  The generated property is read+write, so it may be overriden.
-  
+
+  The generated property is read+write, so it may be overridden.
+
   @param {String} propertyName The name of the property to get from the render delegate..
   @param {Value} def The default value to use if the property is not present.
 */
@@ -382,7 +397,7 @@ SC.propertyFromRenderDelegate = function(propertyName, def) {
     }
 
     if (ret !== undefined) return ret;
-    
+
     return def;
   }.property('renderDelegate').cacheable();
 };

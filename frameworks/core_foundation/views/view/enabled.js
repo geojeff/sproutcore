@@ -14,7 +14,7 @@ SC.View.reopen(
 
     This property is observable and bindable.
 
-    @property {Boolean}
+    @type Boolean
   */
   isEnabled: YES,
   isEnabledBindingDefault: SC.Binding.oneWay().bool(),
@@ -26,7 +26,7 @@ SC.View.reopen(
 
     This property is not observable.
 
-    @property {Boolean}
+    @type Boolean
   */
   isEnabledInPane: function() {
     var ret = this.get('isEnabled'), pv ;
@@ -42,9 +42,12 @@ SC.View.reopen(
     @observes isEnabled
   */
   _sc_view_isEnabledDidChange: function(){
-    if(!this.get('isEnabled') && this.get('isFirstResponder')){
+    if (!this.get('isEnabled') && this.get('isFirstResponder')) {
       this.resignFirstResponder();
     }
+
+    // isEnabled acts as a display property
+    this.displayDidChange();
   }.observes('isEnabled'),
 
   applyAttributesToContext: function(original, context) {
@@ -53,6 +56,6 @@ SC.View.reopen(
     original(context);
 
     context.setClass('disabled', !isEnabled);
-    context.attr('aria-disabled', !isEnabled ? 'true' : null);
+    context.setAttr('aria-disabled', !isEnabled ? YES : null);
   }.enhance()
 });

@@ -12,12 +12,12 @@ sc_require('core') ;
 
   This bit of meta-programming magic can install a benchmark handler on any
   object method.  When a benchmark is installed, the time required to execute
-  the method will be printed to the console log everytime the method is
+  the method will be printed to the console log every time the method is
   called.
 
   This class can be used to implement benchmarking.  To use this object, just
   call start() with a key name and end() with a keyname.  The benchmark will
-  be logged.  If you set verbose = true, then benchmark will log everytime it
+  be logged.  If you set verbose = true, then benchmark will log every time it
   saves a bench.  Otherwise, it just keeps stats.  You can get the stats by
   calling report().
 
@@ -463,8 +463,7 @@ SC.Benchmark = {
       title: SC.LabelView.extend({
         classNames: ['sc-benchmark-title'],
         layout: { left: 20, top: 23, right: 200, height: 30 },
-        value: ((appName) ? appName : 'SproutCore Application') + (' - Total Captured Time: ' + chartCapturedTime +' ms - Points Captured: ' + chartLen),
-        fontWeight: 'bold'
+        value: ((appName) ? appName : 'SproutCore Application') + (' - Total Captured Time: ' + chartCapturedTime +' ms - Points Captured: ' + chartLen)
       })
 
     }).append();
@@ -523,7 +522,7 @@ SC.Benchmark = {
 
   // ..........................................................
   // Internal Support
-  // 
+  //
 
   /** @private
     Loads data from both the browser's own event hash and SC's pre-load event hash.

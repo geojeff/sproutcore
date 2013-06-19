@@ -12,10 +12,10 @@ var items = [
   { title: 'Menu Item', keyEquivalent: 'ctrl_shift_n' },
   { title: 'Checked Menu Item', isChecked: YES, keyEquivalent: 'ctrl_a' },
   { title: 'Selected Menu Item', keyEquivalent: 'backspace' },
-  { separator: YES },
+  { isSeparator: YES },
   { title: 'Menu Item with Icon', icon: 'inbox', keyEquivalent: 'ctrl_m' },
   { title: 'Menu Item with Icon', icon: 'folder', keyEquivalent: 'ctrl_p' },
-  { separator: YES },
+  { isSeparator: YES },
   { title: 'Selected Menu Item…', isChecked: YES, keyEquivalent: 'ctrl_shift_o' },
   { title: 'Item with Submenu', subMenu: [{ title: 'Submenu item 1' }, { title: 'Submenu item 2'}] },
   { title: 'Disabled Menu Item', isEnabled: NO }//,
@@ -45,7 +45,7 @@ module('SC.MenuPane Methods', {
   teardown: function() {
     menu.remove();
     anchor.remove();
-    menu.destroy();
+    if (!menu.isDestroyed) { menu.destroy(); }
     menu = null;
   }
 });
@@ -80,7 +80,7 @@ test('displayItems', function() {
 
   menu.menuHeight = 1;
   menu.set('items', strings);
-  equals(1, menu.displayItemsCount, 'displayItems should change when items array changes');
+  equals(menu.displayItemsCount, 1, 'displayItems should change when items array changes');
   ok(menu.get('menuHeight') > 1, 'menuHeight should be recalculated when displayItems changes');
 
   output = menu.get('displayItems')[0];
@@ -134,3 +134,18 @@ test('menuItemViewForContentIndex', function() {
   var view = menu.menuItemViewForContentIndex(0);
   equals(items[0].title, view.$('.value').text(), 'menu item views should match content items');
 });
+
+
+/** There was a bug that destroying the menu pane failed to destroy its internally
+  created menu view. */
+test('destroy should destroy the menu view', function () {
+  var menuView = menu._menuView,
+    menuItemView = menu.get('menuItemViews')[0];
+
+  menu.popup();
+  menu.destroy();
+
+  ok(menuView.get('isDestroyed'), 'destroying the menu pane also destroys the menu view.');
+  ok(menuItemView.get('isDestroyed'), 'destroying the menu pane also destroys the menu view child views.');
+  ok(!menuView._menuView, "desroying the menu pane removes the internal reference to the menu view.");
+})

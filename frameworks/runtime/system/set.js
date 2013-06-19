@@ -53,7 +53,7 @@ sc_require('mixins/copyable');
         var foundNames = SC.Set.create();
 
         // creates a set with four names in it.
-        var names = SC.Set.create(["Charles", "Tom", "Juan", "Alex"]) ; // :P
+        var names = SC.Set.create(["Charles", "Tom", "Juan", "Alex"]);
 
         // creates a copy of the names set.
         var namesCopy = SC.Set.create(names);
@@ -169,21 +169,21 @@ SC.Set = SC.mixin({},
   /**
     Walk like a duck
 
-    @property {Boolean}
+    @type Boolean
   */
   isSet: YES,
 
   /**
     This property will change as the number of objects in the set changes.
 
-    @property {Number}
+    @type Number
   */
   length: 0,
 
   /**
     Returns the first object in the set or null if the set is empty
 
-    @property {Object}
+    @type Object
   */
   firstObject: function() {
     return (this.length > 0) ? this[0] : undefined ;
@@ -262,8 +262,7 @@ SC.Set = SC.mixin({},
     // if there is no set, there can be no currently observing set observers
     if (!this.setObservers) return;
 
-    // remove the set observer. Pretty simple, if you think about it. I mean,
-    // honestly.
+    // remove the set observer. Pretty simple, if you think about it.
     this.setObservers.remove(setObserver);
   },
 
@@ -309,7 +308,7 @@ SC.Set = SC.mixin({},
   addEach: function(objects) {
     if (this.isFrozen) throw SC.FROZEN_ERROR;
     if (!objects || !objects.isEnumerable) {
-      throw "%@.addEach must pass enumerable".fmt(this);
+      throw new Error("%@.addEach must pass enumerable".fmt(this));
     }
 
     var idx, isObservable = this.isObservable ;
@@ -367,8 +366,10 @@ SC.Set = SC.mixin({},
       this[guid] = idx;
     }
 
-    // reduce the length
+    // Throw away the last object (it has been moved or is the object we are removing).
+    delete this[len-1];
     this.length = len-1;
+
     if (this.isObservable) this.enumerableContentDidChange();
     if (this.setObservers) this.didRemoveItem(obj);
     return this ;
@@ -395,7 +396,7 @@ SC.Set = SC.mixin({},
   removeEach: function(objects) {
     if (this.isFrozen) throw SC.FROZEN_ERROR;
     if (!objects || !objects.isEnumerable) {
-      throw "%@.addEach must pass enumerable".fmt(this);
+      throw new Error("%@.addEach must pass enumerable".fmt(this));
     }
 
     var idx, isObservable = this.isObservable ;

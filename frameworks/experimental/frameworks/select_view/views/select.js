@@ -5,6 +5,7 @@
 
 sc_require('views/popup_button');
 sc_require('mixins/select_view_menu');
+sc_require('ext/menu');
 
 /**
  * @class
@@ -27,7 +28,7 @@ SC.SelectView = SC.PopupButtonView.extend({
     various itemKey properties to tell the menu how to extract the information
     it needs.
 
-    @property {Array}
+    @type Array
     @default []
   */
   items: null,
@@ -73,27 +74,27 @@ SC.SelectView = SC.PopupButtonView.extend({
 
   /**
      Key used to extract icons from the items array.
-     
+
      @property
      @type {String}
      @default null
   */
   itemIconKey: null,
-  
+
   /**
     Key to use to identify separators.
-    
+
     Items that have this property set to YES will be drawn as separators.
-    
+
     @property
     @type {String}
     @default null
   */
   itemSeparatorKey: "separator",
-  
+
   /**
     Key used to indicate if the item is to be enabled.
-    
+
     @property
     @type {String}
     @default null
@@ -103,24 +104,24 @@ SC.SelectView = SC.PopupButtonView.extend({
 
   /**
    The menu that will pop up when this button is clicked.
-   
+
    The default menu has its properties bound to the SC.SelectView,
    meaning that it will get all its items from the SelectView.
    You may override the menu entirely with one of your own; if you
    mix in SC.SelectViewMenu, it'll get the bindings and the extended
    MenuItemView that draws its checkbox when it is the selected item.
-   
+
    @property
    @type {SC.MenuPane}
-   @default SC.MenuPane.extend(SC.SelectViewMenu)
+   @default SC.AutoResizingMenuPane.extend(SC.SelectViewMenu)
   */
-  menu: SC.MenuPane.extend(SC.SelectViewMenu),
+  menu: SC.AutoResizingMenuPane.extend(SC.SelectViewMenu),
 
   /**
     The currently selected item. If no item is selected, `null`.
-    
+
     @private
-    @property {SC.Object}
+    @type SC.Object
     @default null
     @isReadOnly
    */
@@ -129,9 +130,9 @@ SC.SelectView = SC.PopupButtonView.extend({
 
 
   /**
-    This is a property to enable/disable focus rings in buttons. 
+    This is a property to enable/disable focus rings in buttons.
     For SelectView, it is a default.
-    
+
     @property
     @type {Boolean}
     @default YES
@@ -195,7 +196,7 @@ SC.SelectView = SC.PopupButtonView.extend({
       last.removeObserver(titleKey, this, this._scsv_selectedItemPropertyDidChange);
       last.removeObserver(valueKey, this, this._scsv_selectedItemPropertyDidChange);
     }
-    
+
     if (sel && sel.addObserver && sel !== last) {
       sel.addObserver(titleKey, this, this._scsv_selectedItemPropertyDidChange);
       sel.addObserver(valueKey, this, this._scsv_selectedItemPropertyDidChange);
@@ -261,7 +262,7 @@ SC.SelectView = SC.PopupButtonView.extend({
 
   /**
     SelectView must set the selectView property on the menu so that the menu's
-    properties get bound to the SelectView's. The bindings get set up by 
+    properties get bound to the SelectView's. The bindings get set up by
     the SelectViewMenu mixin, which should be mixed in to any SelectView menu.
 
     In addition, the initial selected item and the initial minimum menu width are set.
@@ -282,9 +283,9 @@ SC.SelectView = SC.PopupButtonView.extend({
     This can be used to make sure the selected menu item is directly on top of
     the label in the SelectView.
 
-    By default, this comes from the render delegate's menuLeftOffset property. 
+    By default, this comes from the render delegate's menuLeftOffset property.
     If you are writing a theme, you should set the value there.
-    
+
     @property
     @type Number
     @default 'menuLeftOffset' from render delegate if present, or 0.
@@ -323,7 +324,7 @@ SC.SelectView = SC.PopupButtonView.extend({
   /**
     The prefer matrix for menu positioning. It is calculated so that the selected
     menu item is positioned directly over the SelectView.
-    
+
     @property
     @type Array
     @private
@@ -339,7 +340,8 @@ SC.SelectView = SC.PopupButtonView.extend({
 
     var idx = this.get('_selectedItemIndex'), itemViews = menu.get('menuItemViews');
     if (idx > -1) {
-      return [leftPosition, topPosition - itemViews[idx].get('layout').top, 2];
+      var layout = itemViews[idx].get('layout');
+      return [leftPosition, topPosition - layout.top + (layout.height/2), 2];
     }
 
     return [leftPosition, topPosition, 2];
@@ -377,22 +379,12 @@ SC.SelectView = SC.PopupButtonView.extend({
     return -1;
   }.property('value', 'menu').cacheable(),
 
-
-  /*
-    Documented in base class; supplying documentation here will break the argument list.
-  */
-  showMenu: function(orig) {
-    orig();
-
-    var menu = this.get('menu'), itemViews = menu.get('menuItemViews');
-  }.enhance(),
-
   /**
     The minimum width for the child menu. For instance, this property can make the
     menu always cover the entire SelectView--or, alternatively, cover all but the
     arrows on the side.
 
-    By default, it is calculated by adding the menuMinimumWidthOffset to the view's 
+    By default, it is calculated by adding the menuMinimumWidthOffset to the view's
     width. If you are writing a theme and want to change the width so the menu covers
     a specific part of the select view, change your render delegate's menuMinimumWidthOffset
     property.
@@ -441,7 +433,7 @@ SC.SelectView = SC.PopupButtonView.extend({
   },
 
   /** @private
-   Function overridden - tied to the isEnabled state 
+   Function overridden - tied to the isEnabled state
   */
   acceptsFirstResponder: function() {
     return this.get('isEnabled');

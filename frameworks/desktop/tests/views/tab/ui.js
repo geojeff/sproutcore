@@ -59,8 +59,6 @@
       layout: { left:12, height: 200, right:12, top:12}
     });
 
-  pane.show(); // add a test to show the test pane
-
   // ..........................................................
   // TEST VIEWS
   //
@@ -82,13 +80,13 @@
    });
 
 
-   test("Check that the tabView has the right classes set", function() {
+  test("Check that the tabView has the right classes set", function() {
      var view = pane.view('tabView1');
      var viewElem = view.$(),
          segmentedView;
-     
+
      segmentedView = view.get('segmentedView');
-     
+
      ok(viewElem.hasClass('sc-view'), 'tabView1.hasClass(sc-view) should be YES');
      ok(viewElem.hasClass('sc-tab-view'), 'tabView1.hasClass(sc-tab-view) should be YES');
      ok(view.$('.sc-segmented-view').length, 'tabView1 should contain a segmented view');
@@ -105,7 +103,26 @@
      segmentedView = view.get('segmentedView');
      ok(view.$('.sc-segmented-view').hasClass('sc-regular-size'), 'tabView3 should contain a segmented view with sc-regular-size class');
      equals(undefined, segmentedView.get('controlSize'), "tabView3's segmentedView's controlSize");
-   });
+  });
+
+  /**
+    There was a regression where the segmented view no longer appeared above the
+    container view, because a default z-index property was applied to all
+    segmented views.  Instead, we simply need to ensure that the DOM order is
+    correct for the TabView.
+  */
+  test("Check the DOM position of the segmented view and container", function () {
+    var view = pane.view('tabView1');
+    var viewElem = view.$(),
+      containerElem,
+      segmentedElem;
+
+    segmentedElem = view.get('segmentedView').get('layer');
+    containerElem = view.get('containerView').get('layer');
+
+    equals(viewElem.children()[0], containerElem, "The first child layer of the tab view layer should be the container view layer.");
+    equals(viewElem.children()[1], segmentedElem, "The second child layer of the tab view layer should be the segmented view layer.");
+  });
 
 
 })();

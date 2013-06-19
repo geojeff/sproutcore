@@ -56,7 +56,7 @@ SC.MenuItemView = SC.View.extend(SC.ContentDisplay,
   acceptsFirstResponder: YES,
 
   /**
-    IE only attribute to block bluring of other controls
+    IE only attribute to block blurring of other controls
 
     @type Boolean
     @default YES
@@ -185,11 +185,11 @@ SC.MenuItemView = SC.View.extend(SC.ContentDisplay,
     //addressing accessibility
     if (this.get('isSeparator')) {
       //assign the role of separator
-      context.attr('role', 'separator');
+      context.setAttr('role', 'separator');
     } else if (this.get('isChecked')) {
       //assign the role of menuitemcheckbox
-      context.attr('role', 'menuitemcheckbox');
-      context.attr('aria-checked', true);
+      context.setAttr('role', 'menuitemcheckbox');
+      context.setAttr('aria-checked', true);
     }
 
     context = context.begin('a').addClass('menu-item');
@@ -245,7 +245,7 @@ SC.MenuItemView = SC.View.extend(SC.ContentDisplay,
       url = SC.BLANK_IMAGE_URL;
     }
     // generate the img element...
-    context.begin('img').addClass('image').addClass(className).attr('src', url).end() ;
+    context.begin('img').addClass('image').addClass(className).setAttr('src', url).end() ;
   },
 
   /** @private
@@ -289,7 +289,7 @@ SC.MenuItemView = SC.View.extend(SC.ContentDisplay,
 
   /**
     This method will check whether the current Menu Item is still
-    selected and then create a submenu accordignly.
+    selected and then create a submenu accordingly.
   */
   showSubMenu: function() {
     var subMenu = this.get('subMenu') ;

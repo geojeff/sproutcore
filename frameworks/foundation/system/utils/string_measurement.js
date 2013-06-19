@@ -10,7 +10,7 @@ SC.mixin( /** @scope SC */ {
   _copy_computed_props: [
     "maxWidth", "maxHeight", "paddingLeft", "paddingRight", "paddingTop", "paddingBottom",
     "fontFamily", "fontSize", "fontStyle", "fontWeight", "fontVariant", "lineHeight",
-    "whiteSpace", "letterSpacing"
+    "whiteSpace", "letterSpacing", "wordWrap"
   ],
 
   /**
@@ -39,7 +39,8 @@ SC.mixin( /** @scope SC */ {
     // quickly.
     var keys = ['maxHeight', 'maxWidth', 'minHeight', 'minWidth', 'centerY',
                 'centerX', 'width', 'height', 'bottom', 'right', 'top',
-                'left'],
+                'left', 'zIndex', 'opacity', 'border', 'borderLeft',
+                'borderRight', 'borderTop', 'borderBottom'],
         keyValues = [], key,
         i = keys.length;
     while (--i >= 0) {
@@ -49,7 +50,7 @@ SC.mixin( /** @scope SC */ {
       }
     }
 
-    return '{' + keyValues.join(', ') + '}';
+    return '{ ' + keyValues.join(', ') + ' }';
   },
 
   /**
@@ -209,11 +210,11 @@ SC.mixin( /** @scope SC */ {
     @param ignoreEscape {Boolean} To NOT html escape the string.
   */
   measureString: function(string, ignoreEscape) {
-    if(!ignoreEscape) string = SC.RenderContext.escapeHTML(string);
+    var element = this._metricsCalculationElement,
+    padding = 0;
 
-    var element = this._metricsCalculationElement;
     if (!element) {
-      throw "measureString requires a string measurement environment to be set up. Did you mean metricsForString?";
+      throw new Error("measureString requires a string measurement environment to be set up. Did you mean metricsForString?");
     }
 
     // since the string has already been escaped (if the user wants it to be),
@@ -223,11 +224,19 @@ SC.mixin( /** @scope SC */ {
     else if (typeof element.innerText != "undefined") element.innerText = string;
     else element.textContent = string;
 
+    // for some reason IE measures 1 pixel too small
+    if(SC.browser.isIE) padding = 1;
+
     // generate result
     var result = {
-      width: element.clientWidth,
+      width: element.clientWidth + padding,
       height: element.clientHeight
     };
+
+    // Firefox seems to be 1 px short at times, especially with non english characters.
+    if (SC.browser.isMozilla) {
+      result.width += 1;
+    }
 
     element = null;
     return result;

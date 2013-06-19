@@ -38,7 +38,6 @@ SC.LIST_ITEM_ACTION_EJECT = 'sc-list-item-cancel-eject';
   @extends SC.View
   @extends SC.Control
   @extends SC.InlineEditable
-  @extends SC.StaticLayout
   @since SproutCore 1.0
 */
 SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
@@ -56,20 +55,12 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @default ['disclosureState', 'escapeHTML']
     @see SC.View#displayProperties
   */
-  displayProperties: ['disclosureState', 'escapeHTML'],
+  displayProperties: ['disclosureState', 'escapeHTML', 'isDropTarget'],
 
 
   // ..........................................................
   // KEY PROPERTIES
   //
-
-  /**
-    The content object the list item will display.
-
-    @type SC.Object
-    @default null
-  */
-  content: null,
 
   /**
     The index of the content object in the ListView to which this
@@ -89,7 +80,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     If false, the icon on the list item view will be hidden.  Otherwise,
     space will be left for the icon next to the list item view.
-    
+
     @type Boolean
     @default NO
   */
@@ -100,7 +91,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     If false, the icon on the list item view will be hidden.  Otherwise,
     space will be left for the icon next to the list item view.
-    
+
     @type Boolean
     @default NO
   */
@@ -111,7 +102,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     arrow.
 
     If false, the space for the branch arrow will be collapsed.
-    
+
     @type Boolean
     @default NO
   */
@@ -130,18 +121,31 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   /**
     The URL or CSS class name to use for the icon. This is only used if
     contentIconKey is null, or returns null from the delegate.
-    
+
     @type String
     @default null
   */
   icon: null,
 
   /**
+    Whether this item is the drop target of a drag operation.
+
+    If the list view supports the SC.DROP_ON operation, it will set this
+    property on whichever list item view is the current target of the drop.
+
+    When true, the 'drop-target' class is added to the element.
+
+    @type Boolean
+    @default false
+  */
+  isDropTarget: NO,
+
+  /**
     (displayDelegate) Property key to use for the icon url
 
     This property will be checked on the content object to determine the
     icon to display.  It must return either a URL or a CSS class name.
-    
+
     @type String
     @default NO
   */
@@ -150,7 +154,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   /**
     The URL or CSS class name to use for the right icon. This is only used if
     contentRightIconKey is null, or returns null from the delegate.
-    
+
     @type String
     @default null
   */
@@ -161,7 +165,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     This property will be checked on the content object to determine the
     icon to display.  It must return either a URL or a CSS class name.
-    
+
     @type String
     @default null
   */
@@ -171,7 +175,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     (displayDelegate) The name of the property used for label itself
 
     If null, then the content object itself will be used..
-    
+
     @type String
     @default null
   */
@@ -182,7 +186,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     You should only disable this option if you are sure you will only
     display content that is already escaped and you need the added
     performance gain.
-    
+
     @type Boolean
     @default YES
   */
@@ -194,7 +198,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     The count will only be visible if this property is not null and the
     returned value is not 0.
-    
+
     @type String
     @default null
   */
@@ -207,17 +211,17 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     If this is null, then the branch view will be completely hidden.
     Otherwise space will be allocated for it.
-    
+
     @type String
     @default null
   */
   contentIsBranchKey: null,
-  
+
   /**
     Indent to use when rendering a list item with an outline level > 0.  The
     left edge of the list item will be indented by this amount for each
     outline level.
-    
+
     @type Number
     @default 16
   */
@@ -225,7 +229,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
   /**
     Outline level for this list item.  Usually set by the collection view.
-    
+
     @type Number
     @default 0
   */
@@ -234,11 +238,11 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   /**
     Disclosure state for this list item.  Usually set by the collection view
     when the list item is created. Possible values:
-    
+
       - SC.LEAF_NODE
       - SC.BRANCH_OPEN
       - SC.BRANCH_CLOSED
-    
+
     @type String
     @default SC.LEAF_NODE
   */
@@ -250,9 +254,18 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   */
   validator: null,
 
+  contentKeys: {
+    contentValueKey: 'title',
+    contentCheckboxKey: 'checkbox',
+    contentIconKey:  'icon',
+    contentRightIconKey: 'rightIcon',
+    contentUnreadCountKey: 'count',
+    contentIsBranchKey: 'branch'
+  },
+
   /** @private */
-  contentPropertyDidChange: function() {
-    //if (this.get('isEditing')) this.discardEditing() ;
+  contentPropertyDidChange: function () {
+    //if (this.get('isEditing')) this.discardEditing();
     if (this.get('contentIsEditable') !== this.contentIsEditable()) {
       this.notifyPropertyChange('contentIsEditable');
     }
@@ -263,22 +276,22 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   /**
     Determines if content is editable or not. Checkboxes and other related
     components will render disabled if an item is not editable.
-    
+
     @field
     @type Boolean
     @observes content
   */
-  contentIsEditable: function() {
+  contentIsEditable: function () {
     var content = this.get('content');
-    return content && (content.get ? content.get('isEditable')!==NO : NO);
+    return content && (content.get ? content.get('isEditable') !== NO : NO);
   }.property('content').cacheable(),
-  
+
   /**
     @type Object
     @default SC.InlineTextFieldDelegate
   */
   inlineEditorDelegate: SC.InlineTextFieldDelegate,
-  
+
   /**
     Finds and retrieves the element containing the label.  This is used
     for inline editing.  The default implementation returns a CoreQuery
@@ -287,35 +300,35 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     @returns {jQuery} jQuery object selecting label elements
   */
-  $label: function() {
+  $label: function () {
     return this.$('label');
   },
 
   /** @private
-    Determines if the event occured inside an element with the specified
+    Determines if the event occurred inside an element with the specified
     classname or not.
   */
-  _isInsideElementWithClassName: function(className, evt) {
+  _isInsideElementWithClassName: function (className, evt) {
     var layer = this.get('layer');
-    if (!layer) return NO ; // no layer yet -- nothing to do
+    if (!layer) return NO; // no layer yet -- nothing to do
 
-    var el = SC.$(evt.target) ;
-    var ret = NO, classNames ;
-    while(!ret && el.length>0 && (el[0] !== layer)) {
-      if (el.hasClass(className)) ret = YES ;
-      el = el.parent() ;
+    var el = SC.$(evt.target);
+    var ret = NO;
+    while (!ret && el.length > 0 && (el[0] !== layer)) {
+      if (el.hasClass(className)) ret = YES;
+      el = el.parent();
     }
     el = layer = null; //avoid memory leaks
-    return ret ;
+    return ret;
   },
 
   /** @private
     Returns YES if the list item has a checkbox and the event occurred
     inside of it.
   */
-  _isInsideCheckbox: function(evt) {
-    var del = this.displayDelegate ;
-    var checkboxKey = this.getDelegateProperty('contentCheckboxKey', del) ;
+  _isInsideCheckbox: function (evt) {
+    var del = this.displayDelegate;
+    var checkboxKey = this.getDelegateProperty('contentCheckboxKey', del);
     return checkboxKey && this._isInsideElementWithClassName('sc-checkbox-view', evt);
   },
 
@@ -323,8 +336,8 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     Returns YES if the list item has a disclosure triangle and the event
     occurred inside of it.
   */
-  _isInsideDisclosure: function(evt) {
-    if (this.get('disclosureState')===SC.LEAF_NODE) return NO;
+  _isInsideDisclosure: function (evt) {
+    if (this.get('disclosureState') === SC.LEAF_NODE) return NO;
     return this._isInsideElementWithClassName('sc-disclosure-view', evt);
   },
 
@@ -332,8 +345,8 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     Returns YES if the list item has a right icon and the event
     occurred inside of it.
   */
-  _isInsideRightIcon: function(evt) {
-    var del = this.displayDelegate ;
+  _isInsideRightIcon: function (evt) {
+    var del = this.displayDelegate;
     var rightIconKey = this.getDelegateProperty('hasContentRightIcon', del) || !SC.none(this.rightIcon);
     return rightIconKey && this._isInsideElementWithClassName('right-icon', evt);
   },
@@ -342,36 +355,36 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     mouseDown is handled only for clicks on the checkbox view or or action
     button.
   */
-  mouseDown: function(evt) {
+  mouseDown: function (evt) {
     // if content is not editable, then always let collection view handle the
     // event.
-    if (!this.get('contentIsEditable')) return NO ;
+    if (!this.get('contentIsEditable')) return NO;
 
     // if occurred inside checkbox, item view should handle the event.
     if (this._isInsideCheckbox(evt)) {
-      this._addCheckboxActiveState() ;
-      this._isMouseDownOnCheckbox = YES ;
-      this._isMouseInsideCheckbox = YES ;
-      return YES ; // listItem should handle this event
+      this._addCheckboxActiveState();
+      this._isMouseDownOnCheckbox = YES;
+      this._isMouseInsideCheckbox = YES;
+      return YES; // listItem should handle this event
 
     } else if (this._isInsideDisclosure(evt)) {
       this._addDisclosureActiveState();
       this._isMouseDownOnDisclosure = YES;
-      this._isMouseInsideDisclosure = YES ;
+      this._isMouseInsideDisclosure = YES;
       return YES;
     } else if (this._isInsideRightIcon(evt)) {
       this._addRightIconActiveState();
       this._isMouseDownOnRightIcon = YES;
-      this._isMouseInsideRightIcon = YES ;
+      this._isMouseInsideRightIcon = YES;
       return YES;
     }
 
-    return NO ; // let the collection view handle this event
+    return NO; // let the collection view handle this event
   },
 
   /** @private */
-  mouseUp: function(evt) {
-    var ret= NO, del, checkboxKey, content, state, idx, set;
+  mouseUp: function (evt) {
+    var ret = NO, del, checkboxKey, content, state, idx, set;
 
     // if mouse was down in checkbox -- then handle mouse up, otherwise
     // allow parent view to handle event.
@@ -379,21 +392,21 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
       // update only if mouse inside on mouse up...
       if (this._isInsideCheckbox(evt)) {
-        del = this.displayDelegate ;
+        del = this.displayDelegate;
         checkboxKey = this.getDelegateProperty('contentCheckboxKey', del);
-        content = this.get('content') ;
+        content = this.get('content');
         if (content && content.get) {
-          var value = content.get(checkboxKey) ;
-          value = (value === SC.MIXED_STATE) ? YES : !value ;
-          content.set(checkboxKey, value) ; // update content
+          var value = content.get(checkboxKey);
+          value = (value === SC.MIXED_STATE) ? YES : !value;
+          content.set(checkboxKey, value); // update content
           this.displayDidChange(); // repaint view...
         }
       }
 
-      this._removeCheckboxActiveState() ;
-      ret = YES ;
+      this._removeCheckboxActiveState();
+      ret = YES;
 
-    // if mouse as down on disclosure -- handle mosue up.  otherwise pass on
+    // if mouse as down on disclosure -- handle mouse up.  otherwise pass on
     // to parent.
     } else if (this._isMouseDownOnDisclosure) {
       if (this._isInsideDisclosure(evt)) {
@@ -415,68 +428,69 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
       }
 
       this._removeDisclosureActiveState();
-      ret = YES ;
+      ret = YES;
     // if mouse was down in right icon -- then handle mouse up, otherwise
     // allow parent view to handle event.
     } else if (this._isMouseDownOnRightIcon) {
-      this._removeRightIconActiveState() ;
-      ret = YES ;
+      this._removeRightIconActiveState();
+      ret = YES;
     }
 
     // clear cached info
-    this._isMouseInsideCheckbox = this._isMouseDownOnCheckbox = NO ;
-    this._isMouseDownOnDisclosure = this._isMouseInsideDisclosure = NO ;
-    this._isMouseInsideRightIcon = this._isMouseDownOnRightIcon = NO ;
-    return ret ;
+    this._isMouseInsideCheckbox = this._isMouseDownOnCheckbox = NO;
+    this._isMouseDownOnDisclosure = this._isMouseInsideDisclosure = NO;
+    this._isMouseInsideRightIcon = this._isMouseDownOnRightIcon = NO;
+    return ret;
   },
 
   /** @private */
-  mouseMoved: function(evt) {
+  mouseMoved: function (evt) {
     if (this._isMouseDownOnCheckbox && this._isInsideCheckbox(evt)) {
-      this._addCheckboxActiveState() ;
-      this._isMouseInsideCheckbox = YES ;
+      this._addCheckboxActiveState();
+      this._isMouseInsideCheckbox = YES;
     } else if (this._isMouseDownOnCheckbox) {
-     this._removeCheckboxActiveState() ;
-     this._isMouseInsideCheckbox = NO ;
+      this._removeCheckboxActiveState();
+      this._isMouseInsideCheckbox = NO;
     } else if (this._isMouseDownOnDisclosure && this._isInsideDisclosure(evt)) {
       this._addDisclosureActiveState();
       this._isMouseInsideDisclosure = YES;
-   } else if (this._isMouseDownOnDisclosure) {
-     this._removeDisclosureActiveState();
-     this._isMouseInsideDisclosure = NO ;
+    } else if (this._isMouseDownOnDisclosure) {
+      this._removeDisclosureActiveState();
+      this._isMouseInsideDisclosure = NO;
     } else if (this._isMouseDownOnRightIcon && this._isInsideRightIcon(evt)) {
       this._addRightIconActiveState();
       this._isMouseInsideRightIcon = YES;
-   } else if (this._isMouseDownOnRightIcon) {
-     this._removeRightIconActiveState();
-     this._isMouseInsideRightIcon = NO ;
-   }
-   return NO ;
+    } else if (this._isMouseDownOnRightIcon) {
+      this._removeRightIconActiveState();
+      this._isMouseInsideRightIcon = NO;
+    }
+
+    return NO;
   },
 
   /** @private */
-  touchStart: function(evt){
+  touchStart: function (evt) {
     return this.mouseDown(evt);
   },
 
   /** @private */
-  touchEnd: function(evt){
+  touchEnd: function (evt) {
     return this.mouseUp(evt);
   },
 
   /** @private */
-  touchEntered: function(evt){
+  touchEntered: function (evt) {
     return this.mouseEntered(evt);
   },
 
   /** @private */
-  touchExited: function(evt){
+  touchExited: function (evt) {
     return this.mouseExited(evt);
   },
 
 
   /** @private */
-  _addCheckboxActiveState: function() {
+  _addCheckboxActiveState: function () {
     if (this.get('isEnabled')) {
       if (this._checkboxRenderDelegate) {
         var source = this._checkboxRenderSource;
@@ -492,7 +506,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   },
 
   /** @private */
-  _removeCheckboxActiveState: function() {
+  _removeCheckboxActiveState: function () {
     if (this._checkboxRenderer) {
       var source = this._checkboxRenderSource;
 
@@ -506,7 +520,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   },
 
   /** @private */
-  _addDisclosureActiveState: function() {
+  _addDisclosureActiveState: function () {
     if (this.get('isEnabled')) {
       if (this._disclosureRenderDelegate) {
         var source = this._disclosureRenderSource;
@@ -522,7 +536,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   },
 
   /** @private */
-  _removeDisclosureActiveState: function() {
+  _removeDisclosureActiveState: function () {
     if (this._disclosureRenderer) {
       var source = this._disclosureRenderSource;
       source.set('isActive', NO);
@@ -535,13 +549,13 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   },
 
   /** @private */
-  _addRightIconActiveState: function() {
-   this.$('img.right-icon').setClass('active', YES);
+  _addRightIconActiveState: function () {
+    this.$('img.right-icon').setClass('active', YES);
   },
 
   /** @private */
-  _removeRightIconActiveState: function() {
-   this.$('img.right-icon').removeClass('active');
+  _removeRightIconActiveState: function () {
+    this.$('img.right-icon').removeClass('active');
   },
 
   /** @private
@@ -554,34 +568,34 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @param evt {Event} the mouseUp event.
     @returns {Boolean} YES if the mouse was on the content element itself.
   */
-  contentHitTest: function(evt) {
-   // if not content value is returned, not much to do.
-   var del = this.displayDelegate ;
-   var labelKey = this.getDelegateProperty('contentValueKey', del) ;
-   if (!labelKey) return NO ;
+  contentHitTest: function (evt) {
+    // if not content value is returned, not much to do.
+    var del = this.displayDelegate;
+    var labelKey = this.getDelegateProperty('contentValueKey', del);
+    if (!labelKey) return NO;
 
-   // get the element to check for.
-   var el = this.$label()[0] ;
-   if (!el) return NO ; // no label to check for.
+    // get the element to check for.
+    var el = this.$label()[0];
+    if (!el) return NO; // no label to check for.
 
-   var cur = evt.target, layer = this.get('layer') ;
-   while(cur && (cur !== layer) && (cur !== window)) {
-     if (cur === el) return YES ;
-     cur = cur.parentNode ;
-   }
+    var cur = evt.target, layer = this.get('layer');
+    while (cur && (cur !== layer) && (cur !== window)) {
+      if (cur === el) return YES;
+      cur = cur.parentNode;
+    }
 
-   return NO;
+    return NO;
   },
 
   /*
     Edits the label portion of the list item. If scrollIfNeeded is YES, will
     scroll to the item before editing it.
-    
+
     @params {Boolean} if the parent scroll view should be scrolled to this item
       before editing begins
     @returns {Boolean} YES if successful
   */
-  beginEditing: function(original, scrollIfNeeded) {
+  beginEditing: function (original, scrollIfNeeded) {
     var el        = this.$label(),
         parent    = this.get('parentView');
 
@@ -590,15 +604,17 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     // and begin editing.  Right now collection view will regenerate the item
     // view too often.
     if (scrollIfNeeded && this.scrollToVisible()) {
-      var collectionView = this.get('owner'), idx = this.get('contentIndex');
-      this.invokeLast(function() {
+      var collectionView = this.get('owner'),
+        idx = this.get('contentIndex');
+
+      this.invokeLast(function () {
         var item = collectionView.itemViewForContentIndex(idx);
         if (item && item.beginEditing) item.beginEditing(NO);
       });
       return YES; // let the scroll happen then begin editing...
     }
 
-    else if (!parent || !el || el.get('length')===0) return NO ;
+    else if (!parent || !el || el.get('length') === 0) return NO;
 
     else return original();
   }.enhance(),
@@ -606,15 +622,14 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
   /*
     Configures the editor to overlay the label properly.
   */
-  inlineEditorWillBeginEditing: function(editor, editable, value) {
+  inlineEditorWillBeginEditing: function (editor, editable, value) {
     var content   = this.get('content'),
         del       = this.get('displayDelegate'),
         labelKey  = this.getDelegateProperty('contentValueKey', del),
-        parent    = this.get('parentView'),
         el        = this.$label(),
         validator = this.get('validator'),
         f, v, offset, fontSize, top, lineHeight, escapeHTML,
-        lineHeightShift, targetLineHeight, ret ;
+        lineHeightShift, targetLineHeight;
 
     v = (labelKey && content) ? (content.get ? content.get(labelKey) : content[labelKey]) : content;
 
@@ -626,26 +641,26 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     fontSize = el.css('fontSize');
     top = this.$().css('top');
 
-    if (top) top = parseInt(top.substring(0,top.length-2),0);
-    else top =0;
+    if (top) top = parseInt(top.substring(0, top.length - 2), 0);
+    else top = 0;
 
     lineHeightShift = 0;
 
     if (fontSize && lineHeight) {
-      targetLineHeight = fontSize * 1.5 ;
+      targetLineHeight = fontSize * 1.5;
       if (targetLineHeight < lineHeight) {
         el.css({ lineHeight: '1.5' });
         lineHeightShift = (lineHeight - targetLineHeight) / 2;
-      } else oldLineHeight = null ;
+      } else this._oldLineHeight = null;
     }
 
     el = el[0];
     offset = SC.offset(el);
 
     f.x = offset.x;
-    f.y = offset.y+top + lineHeightShift ;
-    f.height = el.offsetHeight ;
-    f.width = el.offsetWidth ;
+    f.y = offset.y + top + lineHeightShift;
+    f.height = el.offsetHeight;
+    f.width = el.offsetWidth;
 
     escapeHTML = this.get('escapeHTML');
 
@@ -654,44 +669,43 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
       exampleFrame: f,
       exampleElement: el,
       multiline: NO,
-      isCollection: YES,
       validator: validator,
       escapeHTML: escapeHTML
-    }) ;
+    });
   },
 
   /** @private
     Allow editing.
   */
-  inlineEditorShouldBeginEditing: function(inlineEditor) {
+  inlineEditorShouldBeginEditing: function (inlineEditor) {
     return YES;
   },
 
   /** @private
    Hide the label view while the inline editor covers it.
   */
-  inlineEditorDidBeginEditing: function(original, inlineEditor, value, editable) {
+  inlineEditorDidBeginEditing: function (original, inlineEditor, value, editable) {
     original(inlineEditor, value, editable);
 
-    var el = this.$label() ;
+    var el = this.$label();
     this._oldOpacity = el.css('opacity');
-    el.css('opacity', 0.0) ;
+    el.css('opacity', 0.0);
 
-    // restore old line height for original item if the old line height 
+    // restore old line height for original item if the old line height
     // was saved.
-    if (this._oldLineHeight) el.css({ lineHeight: this._oldLineHeight }) ;
+    if (this._oldLineHeight) el.css({ lineHeight: this._oldLineHeight });
   }.enhance(),
 
   /** @private
    Update the field value and make it visible again.
   */
-  inlineEditorDidCommitEditing: function(editor, finalValue, editable) {
-    var content = this.get('content') ;
-    var del = this.displayDelegate ;
-    var labelKey = this.getDelegateProperty('contentValueKey', del) ;
+  inlineEditorDidCommitEditing: function (editor, finalValue, editable) {
+    var content = this.get('content');
+    var del = this.displayDelegate;
+    var labelKey = this.getDelegateProperty('contentValueKey', del);
 
-    if(labelKey && content) {
-      if(content.set) content.set(labelKey, finalValue);
+    if (labelKey && content) {
+      if (content.set) content.set(labelKey, finalValue);
       else content[labelKey] = finalValue;
     }
 
@@ -702,7 +716,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     this._endEditing();
   },
 
-  _endEditing: function(original) {
+  _endEditing: function (original) {
     this.$label().css('opacity', this._oldOpacity);
 
     original();
@@ -717,7 +731,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @param {Boolean} firstTime
     @returns {void}
   */
-  render: function(context, firstTime) {
+  render: function (context, firstTime) {
     var content = this.get('content'),
         del     = this.displayDelegate,
         level   = this.get('outlineLevel'),
@@ -725,12 +739,13 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
         key, value, working, classArray = [];
 
     // add alternating row classes
-    classArray.push((this.get('contentIndex')%2 === 0) ? 'even' : 'odd');
+    classArray.push((this.get('contentIndex') % 2 === 0) ? 'even' : 'odd');
     context.setClass('disabled', !this.get('isEnabled'));
+    context.setClass('drop-target', this.get('isDropTarget'));
 
     // outline level wrapper
     working = context.begin("div").addClass("sc-outline");
-    if (level>=0 && indent>0) working.addStyle("left", indent*(level+1));
+    if (level >= 0 && indent > 0) working.addStyle("left", indent * (level + 1));
 
     // handle disclosure triangle
     value = this.get('disclosureState');
@@ -741,9 +756,9 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
 
     // handle checkbox
-    key = this.getDelegateProperty('contentCheckboxKey', del) ;
+    key = this.getDelegateProperty('contentCheckboxKey', del);
     if (key) {
-      value = content ? (content.get ? content.get(key) : content[key]) : NO ;
+      value = content ? (content.get ? content.get(key) : content[key]) : NO;
       if (value !== null) {
         this.renderCheckbox(working, value);
         classArray.push('has-checkbox');
@@ -752,11 +767,13 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     // handle icon
     if (this.getDelegateProperty('hasContentIcon', del)) {
-      key = this.getDelegateProperty('contentIconKey', del) ;
-      value = (key && content) ? (content.get ? content.get(key) : content[key]) : null ;
+      key = this.getDelegateProperty('contentIconKey', del);
+      value = (key && content) ? (content.get ? content.get(key) : content[key]) : null;
 
-      this.renderIcon(working, value);
-      classArray.push('has-icon');
+      if (value) {
+        this.renderIcon(working, value);
+        classArray.push('has-icon');
+      }
     } else if (this.get('icon')) {
       value = this.get('icon');
       this.renderIcon(working, value);
@@ -764,36 +781,36 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     }
 
     // handle label -- always invoke
-    key = this.getDelegateProperty('contentValueKey', del) ;
-    value = (key && content) ? (content.get ? content.get(key) : content[key]) : content ;
+    key = this.getDelegateProperty('contentValueKey', del);
+    value = (key && content) ? (content.get ? content.get(key) : content[key]) : content;
     if (value && SC.typeOf(value) !== SC.T_STRING) value = value.toString();
     if (this.get('escapeHTML')) value = SC.RenderContext.escapeHTML(value);
     this.renderLabel(working, value);
 
     // handle right icon
     if (this.getDelegateProperty('hasContentRightIcon', del)) {
-      key = this.getDelegateProperty('contentRightIconKey', del) ;
-      value = (key && content) ? (content.get ? content.get(key) : content[key]) : null ;
+      key = this.getDelegateProperty('contentRightIconKey', del);
+      value = (key && content) ? (content.get ? content.get(key) : content[key]) : null;
 
       this.renderRightIcon(working, value);
       classArray.push('has-right-icon');
     }
 
     // handle unread count
-    key = this.getDelegateProperty('contentUnreadCountKey', del) ;
-    value = (key && content) ? (content.get ? content.get(key) : content[key]) : null ;
+    key = this.getDelegateProperty('contentUnreadCountKey', del);
+    value = (key && content) ? (content.get ? content.get(key) : content[key]) : null;
     if (!SC.none(value) && (value !== 0)) {
-      this.renderCount(working, value) ;
+      this.renderCount(working, value);
       var digits = ['zero', 'one', 'two', 'three', 'four', 'five'];
       var valueLength = value.toString().length;
       var digitsLength = digits.length;
-      var digit = (valueLength < digitsLength) ? digits[valueLength] : digits[digitsLength-1];
-      classArray.push('has-count '+digit+'-digit');
+      var digit = (valueLength < digitsLength) ? digits[valueLength] : digits[digitsLength - 1];
+      classArray.push('has-count ' + digit + '-digit');
     }
 
     // handle action
-    key = this.getDelegateProperty('listItemActionProperty', del) ;
-    value = (key && content) ? (content.get ? content.get(key) : content[key]) : null ;
+    key = this.getDelegateProperty('listItemActionProperty', del);
+    value = (key && content) ? (content.get ? content.get(key) : content[key]) : null;
     if (value) {
       this.renderAction(working, value);
       classArray.push('has-action');
@@ -802,7 +819,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     // handle branch
     if (this.getDelegateProperty('hasContentBranch', del)) {
       key = this.getDelegateProperty('contentIsBranchKey', del);
-      value = (key && content) ? (content.get ? content.get(key) : content[key]) : NO ;
+      value = (key && content) ? (content.get ? content.get(key) : content[key]) : NO;
       this.renderBranch(working, value);
       classArray.push('has-branch');
     }
@@ -819,7 +836,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @param {Boolean} state YES, NO or SC.MIXED_STATE
     @returns {void}
   */
-  renderDisclosure: function(context, state) {
+  renderDisclosure: function (context, state) {
     var renderer = this.get('theme').disclosureRenderDelegate;
 
     context = context.begin('div')
@@ -843,7 +860,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
 
     context = context.end();
     this._disclosureRenderDelegate = renderer;
- },
+  },
 
   /** @private
     Adds a checkbox with the appropriate state to the content.  This method
@@ -854,7 +871,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @param {Boolean} state YES, NO or SC.MIXED_STATE
     @returns {void}
   */
-  renderCheckbox: function(context, state) {
+  renderCheckbox: function (context, state) {
     var renderer = this.get('theme').checkboxRenderDelegate;
 
     // note: checkbox-view is really not the best thing to do here; we should do
@@ -881,7 +898,7 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     context = context.end();
 
     this._checkboxRenderDelegate = renderer;
- },
+  },
 
   /** @private
     Generates an icon for the label based on the content.  This method will
@@ -892,20 +909,22 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @param {String} icon a URL or class name.
     @returns {void}
   */
-  renderIcon: function(context, icon) {
+  renderIcon: function (context, icon) {
     // get a class name and url to include if relevant
-    var url = null, className = null , classArray=[];
+    var url = null, className = null, classArray = [];
     if (icon && SC.ImageView.valueIsUrl(icon)) {
-      url = icon; className = '' ;
+      url = icon;
+      className = '';
     } else {
-      className = icon; url = SC.BLANK_IMAGE_URL ;
+      className = icon;
+      url = SC.BLANK_IMAGE_URL;
     }
 
     // generate the img element...
-    classArray.push(className,'icon');
+    classArray.push(className, 'icon');
     context.begin('img')
             .addClass(classArray)
-            .attr('src', url)
+            .setAttr('src', url)
             .end();
   },
 
@@ -917,8 +936,8 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
    @param {String} label the label to display, already HTML escaped.
    @returns {void}
   */
-  renderLabel: function(context, label) {
-    context.push('<label>', label || '', '</label>') ;
+  renderLabel: function (context, label) {
+    context.push('<label>', label || '', '</label>');
   },
 
   /** @private
@@ -930,20 +949,24 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @param {String} icon a URL or class name.
     @returns {void}
   */
-  renderRightIcon: function(context, icon) {
+  renderRightIcon: function (context, icon) {
     // get a class name and url to include if relevant
-    var url = null, className = null, classArray=[];
+    var url = null,
+      className = null,
+      classArray = [];
     if (icon && SC.ImageView.valueIsUrl(icon)) {
-      url = icon; className = '' ;
+      url = icon;
+      className = '';
     } else {
-      className = icon; url = SC.BLANK_IMAGE_URL ;
+      className = icon;
+      url = SC.BLANK_IMAGE_URL;
     }
 
     // generate the img element...
-    classArray.push('right-icon',className);
+    classArray.push('right-icon', className);
     context.begin('img')
       .addClass(classArray)
-      .attr('src', url)
+      .setAttr('src', url)
     .end();
   },
 
@@ -956,9 +979,9 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
    @param {Number} count the count
    @returns {void}
   */
-  renderCount: function(context, count) {
+  renderCount: function (context, count) {
     context.push('<span class="count"><span class="inner">',
-                  count.toString(),'</span></span>') ;
+                  count.toString(), '</span></span>');
   },
 
   /** @private
@@ -969,8 +992,8 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
     @param {String} actionClassName the name of the action item
     @returns {void}
   */
-  renderAction: function(context, actionClassName) {
-    context.push('<img src="',SC.BLANK_IMAGE_URL,'" class="action" />');
+  renderAction: function (context, actionClassName) {
+    context.push('<img src="', SC.BLANK_IMAGE_URL, '" class="action" />');
   },
 
   /** @private
@@ -981,9 +1004,9 @@ SC.ListItemView = SC.View.extend(SC.InlineEditable, SC.Control,
    @param {Boolean} hasBranch YES if the item has a branch
    @returns {void}
   */
-  renderBranch: function(context, hasBranch) {
-    var classArray=[];
-    classArray.push('branch',hasBranch ? 'branch-visible' : 'branch-hidden');
+  renderBranch: function (context, hasBranch) {
+    var classArray = [];
+    classArray.push('branch', hasBranch ? 'branch-visible' : 'branch-hidden');
     context.begin('span')
           .addClass(classArray)
           .push('&nbsp;')

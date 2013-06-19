@@ -4,15 +4,16 @@
 //            Portions ©2008-2011 Apple Inc. All rights reserved.
 // License:   Licensed under MIT license (see license.js)
 // ==========================================================================
+/*global jQuery*/
 
 sc_require('system/browser');
 sc_require('system/event');
 sc_require('system/cursor');
-sc_require('system/responder') ;
+sc_require('system/responder');
 sc_require('system/theme');
 
-sc_require('system/string') ;
-sc_require('views/view/base') ;
+sc_require('system/string');
+sc_require('views/view/base');
 
 
 /**
@@ -42,56 +43,114 @@ SC.EMPTY_CHILD_VIEWS_ARRAY.needsClone = YES;
 SC.CoreView.reopen(
 /** @scope SC.View.prototype */ {
 
+  /**
+    An array of the properties of this class that will be concatenated when
+    also present on subclasses.
+
+    @type Array
+    @default ['outlets', 'displayProperties', 'classNames', 'renderMixin', 'didCreateLayerMixin', 'willDestroyLayerMixin', 'classNameBindings', 'attributeBindings']
+  */
   concatenatedProperties: ['outlets', 'displayProperties', 'classNames', 'renderMixin', 'didCreateLayerMixin', 'willDestroyLayerMixin', 'classNameBindings', 'attributeBindings'],
 
   /**
-    The current pane.
-    @property {SC.Pane}
+    The WAI-ARIA role of the control represented by this view. For example, a
+    button may have a role of type 'button', or a pane may have a role of
+    type 'alertdialog'. This property is used by assistive software to help
+    visually challenged users navigate rich web applications.
+
+    The full list of valid WAI-ARIA roles is available at:
+    http://www.w3.org/TR/wai-aria/roles#roles_categorization
+
+    @type String
+    @default null
   */
-  pane: function() {
-    var view = this ;
-    while (view && !view.isPane) { view = view.get('parentView') ; }
-    return view ;
+  ariaRole: null,
+
+  /**
+    The aria-hidden role is managed appropriately by the internal view's
+    statechart.  When the view is not currently displayed the aria-hidden
+    attribute will be set to true.
+
+    @type String
+    @default null
+    @deprecated Version 1.10
+  */
+  ariaHidden: null,
+
+  /**
+    Whether this view was created by its parent view or not.
+
+    Several views are given child view classes or instances to automatically
+    append and remove.  In the case that the view was provided an instance,
+    when it removes the instance and no longer needs it, it should not destroy
+    the instance because it was created by someone else.
+
+    On the other hand if the view was given a class that it creates internal
+    instances from, then it should destroy those instances properly to avoid
+    memory leaks.
+
+    This property should be set by any view that is creating internal child
+    views so that it can properly remove them later.  Note that if you use
+    `createChildView`, this property is set automatically for you.
+
+    @type Boolean
+    @see SC.View#createChildView
+    @default false
+  */
+  createdByParent: false,
+
+  /**
+    The current pane.
+
+    @field
+    @type SC.Pane
+    @default null
+  */
+  pane: function () {
+    var view = this;
+
+    while (view && !view.isPane) { view = view.get('parentView'); }
+
+    return view;
   }.property('parentView').cacheable(),
 
   /**
     The page this view was instantiated from.  This is set by the page object
     during instantiation.
 
-    @property {SC.Page}
+    @type SC.Page
+    @default null
   */
   page: null,
 
   /**
     If the view is currently inserted into the DOM of a parent view, this
     property will point to the parent of the view.
+
+    @type SC.View
+    @default null
   */
   parentView: null,
 
   /**
-    The isVisible property determines if the view is shown in the view
-    hierarchy it is a part of. A view can have isVisible == YES and still have
-    isVisibleInWindow == NO. This occurs, for instance, when a parent view has
-    isVisible == NO. Default is YES.
+    The isVisible property determines if the view should be displayed or not.
 
-    The isVisible property is considered part of the layout and so changing it
-    will trigger a layout update.
+    If you also set a transitionShow or transitionHide plugin, then when
+    isVisible changes, the appropriate transition will execute as the view's
+    visibility changes.
 
-    @property {Boolean}
+    Note that isVisible can be set to true and the view may still not be
+    "visible" in the window.  This can occur if:
+
+      1. the view is not attached to the document.
+      2. the view has a view ancestor with isVisible set to false.
+
+    @type Boolean
+    @see SC.View#currentState
+    @default true
   */
-  isVisible: YES,
+  isVisible: true,
   isVisibleBindingDefault: SC.Binding.bool(),
-
-  /**
-    Whether the view should be displayed. This is always YES,
-    unless the visibility module is added to SC.View.
-
-    If the visibility module is added, this property will be used to
-    optimize certain behaviors on the view. For example, updates to the
-    view layer will not be performed until the view becomes visible
-    in the window.
-  */
-  isVisibleInWindow: YES,
 
   // ..........................................................
   // CHILD VIEW SUPPORT
@@ -103,7 +162,8 @@ SC.CoreView.reopen(
     use the accessor methods such as appendChild(), insertBefore() and
     removeChild().
 
-    @property {Array}
+    @type Array
+    @default []
   */
   childViews: SC.EMPTY_CHILD_VIEWS_ARRAY,
 
@@ -121,11 +181,11 @@ SC.CoreView.reopen(
 
     You can also set the layer by calling set on this property.
 
-    @property {DOMElement} the layer
+    @type DOMElement the layer
   */
-  layer: function(key, value) {
+  layer: function (key, value) {
     if (value !== undefined) {
-      this._view_layer = value ;
+      this._view_layer = value;
 
     // no layer...attempt to discover it...
     } else {
@@ -133,10 +193,10 @@ SC.CoreView.reopen(
       if (!value) {
         var parent = this.get('parentView');
         if (parent) { parent = parent.get('layer'); }
-        if (parent) { this._view_layer = value = this.findLayerInParentLayer(parent); }
+        this._view_layer = value = this.findLayerInParentLayer(parent);
       }
     }
-    return value ;
+    return value;
   }.property('isVisibleInWindow').cacheable(),
 
   /**
@@ -146,11 +206,11 @@ SC.CoreView.reopen(
     @param {String} sel a CoreQuery-compatible selector string
     @returns {SC.CoreQuery} the CoreQuery object for the DOM node
   */
-  $: function(sel) {
-    var layer = this.get('layer') ;
+  $: function (sel) {
+    var layer = this.get('layer');
 
-    if(!layer) { return SC.$(); }
-    else if(sel === undefined) { return SC.$(layer); }
+    if (!layer) { return SC.$(); }
+    else if (sel === undefined) { return SC.$(layer); }
     else { return SC.$(sel, layer); }
   },
 
@@ -160,10 +220,10 @@ SC.CoreView.reopen(
     returns the layer itself.  You can override this to return a DOM element
     within the layer.
 
-    @property {DOMElement} the container layer
+    @type DOMElement the container layer
   */
-  containerLayer: function() {
-    return this.get('layer') ;
+  containerLayer: function () {
+    return this.get('layer');
   }.property('layer').cacheable(),
 
   /**
@@ -171,13 +231,13 @@ SC.CoreView.reopen(
     set the layerId explicitly, then the view's GUID will be used instead.
     This ID must be set at the time the view is created.
 
-    @property {String}
+    @type String
     @readOnly
   */
-  layerId: function(key, value) {
+  layerId: function (key, value) {
     if (value) { this._layerId = value; }
     if (this._layerId) { return this._layerId; }
-    return SC.guidFor(this) ;
+    return SC.guidFor(this);
   }.property().cacheable(),
 
   /**
@@ -190,9 +250,9 @@ SC.CoreView.reopen(
     @param {DOMElement} parentLayer the parent's DOM layer
     @returns {DOMElement} the discovered layer
   */
-  findLayerInParentLayer: function(parentLayer) {
+  findLayerInParentLayer: function (parentLayer) {
     var id = "#" + this.get('layerId');
-    return jQuery(id)[0] || jQuery(id, parentLayer)[0] ;
+    return jQuery(id, parentLayer)[0] || jQuery(id)[0];
   },
 
   /**
@@ -201,89 +261,66 @@ SC.CoreView.reopen(
 
     @property {SC.View} view
   */
-  isDescendantOf: function(view) {
+  isDescendantOf: function (view) {
     var parentView = this.get('parentView');
 
-    if(this === view) { return YES; }
-    else if(parentView) { return parentView.isDescendantOf(view); }
+    if (this === view) { return YES; }
+    else if (parentView) { return parentView.isDescendantOf(view); }
     else { return NO; }
   },
 
   /**
-    This method is invoked whenever a display property changes.  It will set
-    the layerNeedsUpdate method to YES.  If you need to perform additional
-    setup whenever the display changes, you can override this method as well.
+    This method is invoked whenever a display property changes and updates
+    the view's content once at the end of the run loop before any invokeLast
+    functions run.
+
+    To cause the view to be updated you can call this method directly and
+    if you need to perform additional setup whenever the display changes, you
+    can override this method as well.
 
     @returns {SC.View} receiver
   */
-  displayDidChange: function() {
-    this.set('layerNeedsUpdate', YES) ;
+  displayDidChange: function () {
+    // Filter the input channel.
+    this.invokeOnce(this._doUpdateContent);
+
     return this;
   },
 
   /**
-    Marks the view as needing a display update if the isVisible property changes.
+    This property has no effect and is deprecated.
 
-    Note that this behavior is identical to a display property. It is broken out
-    into its own observer so that it can be overridden with additional
-    functionality if the visibility module is applied to SC.View.
-  */
-  _sc_isVisibleDidChange: function() {
-    this.displayDidChange();
-  }.observes('isVisible'),
+    To cause a view to update immediately, you should just call updateLayer or
+    updateLayerIfNeeded.  To cause a view to update at the end of the run loop
+    before any invokeLast functions run, you should call displayDidChange.
 
-  /**
-    Setting this property to YES will cause the updateLayerIfNeeded method to
-    be invoked at the end of the runloop.  You can also force a view to update
-    sooner by calling updateLayerIfNeeded() directly.  The method will update
-    the layer only if this property is YES.
-
-    @property {Boolean}
+    @deprecated Version 1.10
+    @type Boolean
     @test in updateLayer
   */
   layerNeedsUpdate: NO,
 
-  /** @private
-    Schedules the updateLayerIfNeeded method to run at the end of the runloop
-    if layerNeedsUpdate is set to YES.
-  */
-  _view_layerNeedsUpdateDidChange: function() {
-    if (this.get('layerNeedsUpdate')) {
-      this.invokeOnce(this.updateLayerIfNeeded) ;
-    }
-  }.observes('layerNeedsUpdate'),
-
   /**
-    Updates the layer only if the view is visible onscreen and if
-    layerNeedsUpdate is set to YES.  Normally you will not invoke this method
-    directly.  Instead you set the layerNeedsUpdate property to YES and this
-    method will be called once at the end of the runloop.
+    Updates the view's layer if the view is in a shown state.  Otherwise, the
+    view will be updated the next time it enters a shown state.
 
-    If you need to update view's layer sooner than the end of the runloop, you
-    can call this method directly.  If your view is not visible in the window
-    but you want it to update anyway, then call this method, passing YES for
-    the 'skipIsVisibleInWindowCheck' parameter.
-
-    You should not override this method.  Instead override updateLayer() or
-    render().
+    This is the same behavior as `displayDidChange` except that calling
+    `updateLayerIfNeeded` will attempt to update each time it is called,
+    while `displayDidChange` will only attempt to update the layer once per run
+    loop.
 
     @returns {SC.View} receiver
     @test in updateLayer
   */
-  updateLayerIfNeeded: function(skipIsVisibleInWindowCheck) {
-    var needsUpdate  = this.get('layerNeedsUpdate'),
-        shouldUpdate = needsUpdate  &&  (skipIsVisibleInWindowCheck || this.get('isVisibleInWindow'));
-    if (shouldUpdate) {
-      // only update a layer if it already exists
-      if (this.get('layer')) {
-        this.beginPropertyChanges() ;
-        this.set('layerNeedsUpdate', NO) ;
-        this.updateLayer() ;
-        this.endPropertyChanges() ;
-      }
+  updateLayerIfNeeded: function (skipIsVisibleInWindowCheck) {
+    //@if(debug)
+    if (skipIsVisibleInWindowCheck) {
+      SC.warn("Developer Warning: The `skipIsVisibleInWindowCheck` argument of updateLayerIfNeeded is not supported and will be ignored.");
     }
+    //@endif
+    this._doUpdateContent(false);
 
-    return this ;
+    return this;
   },
 
   /**
@@ -296,60 +333,21 @@ SC.CoreView.reopen(
     run at the end of the run loop, or you can call updateLayerIfNeeded()
     to force the layer to update immediately.
 
-    Instead of overriding this method, consider overidding the render() method
+    Instead of overriding this method, consider overriding the render() method
     instead, which is called both when creating and updating a layer.  If you
     do not want your render() method called when updating a layer, then you
     should override this method instead.
 
-    @param optionalContext provided only for backwards-compatibility.
-
     @returns {SC.View} receiver
   */
-  updateLayer: function(optionalContext) {
-    var mixins, idx, len, hasLegacyRenderMethod;
+  updateLayer: function () {
+    this._doUpdateContent(true);
 
-    var context = optionalContext || this.renderContext(this.get('layer')) ;
-    this._renderLayerSettings(context, NO);
-
-    // If the render method takes two parameters, we assume that it is a
-    // legacy implementation that takes context and firstTime. If it has only
-    // one parameter, we assume it is the render delegates style that requires
-    // only context. Note that, for backwards compatibility, the default
-    // SC.View implementation of render uses the old style.
-    hasLegacyRenderMethod = !this.update;
-    // Call render with firstTime set to NO to indicate an update, rather than
-    // full re-render, should be performed.
-    if (hasLegacyRenderMethod) {
-      this.render(context, NO);
-    }
-    else {
-      this.update(context.$());
-    }
-    if (mixins = this.renderMixin) {
-      len = mixins.length;
-      for(idx=0; idx<len; ++idx) { mixins[idx].call(this, context, NO) ; }
-    }
-
-    context.update() ;
-    if (context._innerHTMLReplaced) {
-      var pane = this.get('pane');
-      if(pane && pane.get('isPaneAttached')) {
-        this._notifyDidAppendToDocument();
-      }
-    }
-
-    // If this view uses static layout, then notify that the frame (likely)
-    // changed.
-    if (this.useStaticLayout) { this.viewDidResize(); }
-
-    if (this.didUpdateLayer) { this.didUpdateLayer(); } // call to update DOM
-    if(this.designer && this.designer.viewDidUpdateLayer) {
-      this.designer.viewDidUpdateLayer(); //let the designer know
-    }
-    return this ;
+    return this;
   },
 
-  parentViewDidResize: function() {
+  /** @private */
+  parentViewDidResize: function () {
     if (!this.get('hasLayout')) { this.notifyPropertyChange('frame'); }
     this.viewDidResize();
   },
@@ -358,7 +356,7 @@ SC.CoreView.reopen(
     Override this in a child class to define behavior that should be invoked
     when a parent's view was resized.
    */
-  viewDidResize: function() {},
+  viewDidResize: function () {},
 
   /**
     Creates a new renderContext with the passed tagName or element.  You
@@ -367,8 +365,8 @@ SC.CoreView.reopen(
 
     @returns {SC.RenderContext}
   */
-  renderContext: function(tagNameOrElement) {
-    return SC.RenderContext(tagNameOrElement) ;
+  renderContext: function (tagNameOrElement) {
+    return SC.RenderContext(tagNameOrElement);
   },
 
   /**
@@ -383,60 +381,10 @@ SC.CoreView.reopen(
 
     @returns {SC.View} receiver
   */
-  createLayer: function() {
-    if (this.get('layer')) { return this ; } // nothing to do
+  createLayer: function () {
+    this._doRender();
 
-    var context = this.renderContext(this.get('tagName')) ;
-
-    // now prepare the content like normal.
-    this.renderToContext(context) ;
-    this.set('layer', context.element()) ;
-
-    // now notify the view and its child views..
-    this._notifyDidCreateLayer() ;
-
-    return this ;
-  },
-
-  /** @private -
-    Invokes the receivers didCreateLayer() method if it exists and then
-    invokes the same on all child views.
-  */
-  _notifyDidCreateLayer: function() {
-    this.notifyPropertyChange('layer');
-
-    if (this.didCreateLayer) { this.didCreateLayer() ; }
-
-    // and notify others
-    var mixins = this.didCreateLayerMixin, len, idx,
-        childViews = this.get('childViews'),
-        childView;
-    if (mixins) {
-      len = mixins.length ;
-      for (idx=0; idx<len; ++idx) { mixins[idx].call(this) ; }
-    }
-
-    len = childViews.length ;
-    for (idx=0; idx<len; ++idx) {
-      childView = childViews[idx];
-      if (!childView) { continue; }
-
-      // A parent view creating a layer might result in the creation of a
-      // child view's DOM node being created via a render context without
-      // createLayer() being invoked on the child.  In such cases, if anyone
-      // had requested 'layer' and it was cached as null, we need to
-      // invalidate it.
-      childView.notifyPropertyChange('layer');
-
-      // A strange case, that a childView's frame won't be correct before
-      // we have a layer, if the childView doesn't have a fixed layout
-      // and we are using static layout
-      if (this.get('useStaticLayout')) {
-        if (!childView.get('isFixedLayout')) { childView.viewDidResize(); }
-      }
-
-      childView._notifyDidCreateLayer() ;
-    }
+    return this;
   },
 
   /**
@@ -457,65 +405,75 @@ SC.CoreView.reopen(
 
     @returns {SC.View} receiver
   */
-  destroyLayer: function() {
-    var layer = this.get('layer') ;
-    if (layer) {
-
-      // Now notify the view and its child views.  It will also set the
-      // layer property to null.
-      this._notifyWillDestroyLayer() ;
-
-      // do final cleanup
-      if (layer.parentNode) { layer.parentNode.removeChild(layer) ; }
-      layer = null ;
+  destroyLayer: function () {
+    // We allow you to call destroy layer, but you should really detach first.
+    if (this.get('isAttached')) {
+      this._doDetach();
     }
-    return this ;
+
+    this._doDestroyLayer();
+
+    return this;
   },
 
   /**
-    Destroys and recreates the current layer.  This can be more efficient than
-    modifying individual child views.
+    Destroys and recreates the current layer.  Doing this on a parent view can
+    be more efficient than modifying individual child views independently.
 
     @returns {SC.View} receiver
   */
-  replaceLayer: function() {
-    this.destroyLayer();
-    //this.set('layerLocationNeedsUpdate', YES) ;
-    this.invokeOnce(this.updateLayerLocation) ;
+  replaceLayer: function () {
+    var layer, parentNode;
+
+    // If attached, detach and track our parent node so we can re-attach.
+    if (this.get('isAttached')) {
+      layer = this.get('layer');
+      parentNode = layer.parentNode;
+
+      this._doDetach();
+    }
+
+    this.destroyLayer().createLayer();
+
+    // Reattach our layer (if we have a parentView this is done automatically).
+    if (parentNode && !this.get('isAttached')) { this._doAttach(parentNode); }
+
+    return this;
   },
 
   /**
     If the parent view has changed, we need to insert this
     view's layer into the layer of the new parent view.
   */
-  parentViewDidChange: function() {
-    this.parentViewDidResize();
-    this.updateLayerLocation();
+  parentViewDidChange: function () {
+    //@if(debug)
+    SC.warn("Developer Warning: parentViewDidChange has been deprecated.  Please use the notification methods willAddChild, didAddChild, willRemoveChild or didRemoveChild on the parent or willAddToParent, didAddToParent, willRemoveFromParent or didRemoveFromParent on the child to perform updates when the parent/child status changes.");
+    //@endif
   },
 
   /**
     Set to YES when the view's layer location is dirty.  You can call
     updateLayerLocationIfNeeded() to clear this flag if it is set.
 
-    @property {Boolean}
+    @deprecated Version 1.10
+    @type Boolean
   */
   layerLocationNeedsUpdate: NO,
 
   /**
     Calls updateLayerLocation(), but only if the view's layer location
-    currently needs to be updated.  This method is called automatically at
-    the end of a run loop if you have called parentViewDidChange() at some
-    point.
+    currently needs to be updated.
 
-    @property {Boolean} force This property is ignored.
+    @deprecated Version 1.10
     @returns {SC.View} receiver
     @test in updateLayerLocation
   */
-  updateLayerLocationIfNeeded: function(force) {
-    if (this.get('layerLocationNeedsUpdate')) {
-      this.updateLayerLocation() ;
-    }
-    return this ;
+  updateLayerLocationIfNeeded: function () {
+    //@if(debug)
+    SC.warn("SC.View.prototype.updateLayerLocationIfNeeded is no longer used and has been deprecated.  See the SC.View statechart code for more details on attaching and detaching layers.");
+    //@endif
+
+    return this;
   },
 
   /**
@@ -523,85 +481,16 @@ SC.CoreView.reopen(
     hierarchy.  This method will update the underlying DOM-location of the
     layer so that it reflects the new location.
 
+    @deprecated Version 1.10
     @returns {SC.View} receiver
   */
-  updateLayerLocation: function() {
-    // collect some useful value
-    // if there is no node for some reason, just exit
-    var node = this.get('layer'),
-        parentView = this.get('parentView'),
-        parentNode = parentView ? parentView.get('containerLayer') : null ;
+  updateLayerLocation: function () {
+    //@if(debug)
+    SC.warn("SC.View.prototype.updateLayerLocation is no longer used and has been deprecated.  See the SC.View statechart code for more details on attaching and detaching layers.");
+    //@endif
 
-    // remove node from current parentNode if the node does not match the new
-    // parent node.
-    if (node && node.parentNode && node.parentNode !== parentNode) {
-      node.parentNode.removeChild(node);
-    }
-
-    // CASE 1: no new parentView.  just remove from parent (above).
-    if (!parentView) {
-      if (node && node.parentNode) { node.parentNode.removeChild(node); }
-
-    // CASE 2: parentView has no layer, view has layer.  destroy layer
-    // CASE 3: parentView has no layer, view has no layer, nothing to do
-    } else if (!parentNode) {
-      if (node) {
-        if (node.parentNode) { node.parentNode.removeChild(node); }
-        this.destroyLayer();
-      }
-
-    // CASE 4: parentView has layer, view has no layer.  create layer & add
-    // CASE 5: parentView has layer, view has layer.  move layer
-    } else {
-      if (!node) {
-        this.createLayer() ;
-        node = this.get('layer') ;
-        if (!node) { return; } // can't do anything without a node.
-      }
-
-      var siblings = parentView.get('childViews'),
-          nextView = siblings.objectAt(siblings.indexOf(this)+1),
-          nextNode = (nextView) ? nextView.get('layer') : null ;
-
-      // before we add to parent node, make sure that the nextNode exists...
-      if (nextView && (!nextNode || nextNode.parentNode!==parentNode)) {
-        nextView.updateLayerLocationIfNeeded() ;
-        nextNode = nextView.get('layer') ;
-      }
-
-      // add to parentNode if needed.
-      if ((node.parentNode!==parentNode) || (node.nextSibling!==nextNode)) {
-        parentNode.insertBefore(node, nextNode) ;
-      }
-    }
-
-    parentNode = parentView = node = nextNode = null ; // avoid memory leaks
-
-    this.set('layerLocationNeedsUpdate', NO) ;
-
-    return this ;
+    return this;
   },
-
-  /** @private -
-    Invokes willDestroyLayer() on view and child views.  Then sets layer to
-    null for receiver.
-  */
-  _notifyWillDestroyLayer: function() {
-    if (this.willDestroyLayer) { this.willDestroyLayer() ; }
-    var mixins = this.willDestroyLayerMixin, len, idx,
-        childViews = this.get('childViews') ;
-    if (mixins) {
-      len = mixins.length ;
-      for (idx=0; idx<len; ++idx) { mixins[idx].call(this) ; }
-    }
-
-    len = childViews.length ;
-    for (idx=0; idx<len; ++idx) { childViews[idx]._notifyWillDestroyLayer() ; }
-
-    this.set('layer', null) ;
-  },
-
-
 
   /**
     @private
@@ -614,80 +503,53 @@ SC.CoreView.reopen(
     a context.
 
     @param {SC.RenderContext} context the render context.
-    @param {Boolean} firstTime Provided for compatibility when rendering legacy views only.
   */
-  renderToContext: function(context, firstTime) {
-    var hasLegacyRenderMethod, mixins, idx, len;
+  renderToContext: function (context) {
+    var mixins, idx, len;
 
-    this.beginPropertyChanges() ;
-    this.set('layerNeedsUpdate', NO) ;
+    this.beginPropertyChanges();
 
-    if (SC.none(firstTime)) { firstTime = YES; }
+    context.id(this.get('layerId'));
+    context.setAttr('role', this.get('ariaRole'));
 
-    this._renderLayerSettings(context, firstTime);
-
-    // If the render method takes two parameters, we assume that it is a
-    // legacy implementation that takes context and firstTime. If it has only
-    // one parameter, we assume it is the render delegates style that requires
-    // only context. Note that, for backwards compatibility, the default
-    // SC.View implementation of render uses the old style.
-    hasLegacyRenderMethod = !this.update;
-
-    // Let the render method handle rendering. If we have a render delegate
-    // object set, it will be used there.
-    if (hasLegacyRenderMethod) {
-      this.render(context, firstTime);
-    }
-    // This view implements the render delegate protocol.
-    else {
-      if (firstTime) {
-        this.render(context);
-      } else {
-        this.update(context.$());
-      }
-    }
-
-    // If we've made it this far and renderChildViews() was never called,
-    // render any child views now.
-    if (firstTime && !this._didRenderChildViews) { this.renderChildViews(context, firstTime); }
-    // Reset the flag so that if the layer is recreated we re-render the child views
-    this._didRenderChildViews = NO;
-
-
-    if (mixins = this.renderMixin) {
-      len = mixins.length;
-      for(idx=0; idx<len; ++idx) { mixins[idx].call(this, context, firstTime) ; }
-    }
-
-    this.endPropertyChanges() ;
-  },
-
-  _renderLayerSettings: function(context, firstTime) {
-    context.resetClassNames();
-    context.resetStyles();
-
-    this.applyAttributesToContext(context);
-  },
-
-  applyAttributesToContext: function(context) {
-    if (!this.get('layer')) {
-      this._applyClassNameBindings();
-      this._applyAttributeBindings(context);
-    }
+    // Set up the classNameBindings and attributeBindings observers.
+    // TODO: CLEAN UP!!
+    this._applyClassNameBindings();
+    this._applyAttributeBindings(context);
 
     context.addClass(this.get('classNames'));
 
     if (this.get('isTextSelectable')) { context.addClass('allow-select'); }
-    if (!this.get('isVisible')) { context.addClass('sc-hidden'); }
-    if (this.get('isFirstResponder')) { 
-      context.addClass('focus');
-      context.attr('tabindex', '0'); 
-    }else{
-      context.attr('tabindex', '-1');
+
+    if (!this.get('isVisible')) {
+      context.addClass('sc-hidden');
+      context.setAttr('aria-hidden', 'true');
     }
 
-    context.id(this.get('layerId'));
-    context.attr('role', this.get('ariaRole'));
+    // Call applyAttributesToContext so that subclasses that override it can
+    // insert further attributes.
+    this.applyAttributesToContext(context);
+
+    // We pass true for the second argument to support the old style of render.
+    this.render(context, true);
+
+    // If we've made it this far and renderChildViews() was never called,
+    // render any child views now.
+    if (!this._didRenderChildViews) { this.renderChildViews(context); }
+    // Reset the flag so that if the layer is recreated we re-render the child views.
+    this._didRenderChildViews = false;
+
+    if (mixins = this.renderMixin) {
+      len = mixins.length;
+      for (idx = 0; idx < len; ++idx) { mixins[idx].call(this, context, true); }
+    }
+
+    this.endPropertyChanges();
+  },
+
+  /** Apply the attributes to the context. */
+  applyAttributesToContext: function (context) {
+
   },
 
   /**
@@ -698,17 +560,17 @@ SC.CoreView.reopen(
     observer to update the view's element if the bound property ever changes
     in the future.
   */
-  _applyClassNameBindings: function() {
+  _applyClassNameBindings: function () {
     var classBindings = this.get('classNameBindings'),
         classNames = this.get('classNames'),
-        elem, newClass, dasherizedClass;
+        dasherizedClass;
 
     if (!classBindings) { return; }
 
     // Loop through all of the configured bindings. These will be either
     // property names ('isUrgent') or property paths relative to the view
     // ('content.isUrgent')
-    classBindings.forEach(function(property) {
+    classBindings.forEach(function (property) {
 
       // Variable in which the old class value is saved. The observer function
       // closes over this variable, so it knows which string to remove when
@@ -717,27 +579,29 @@ SC.CoreView.reopen(
 
       // Set up an observer on the context. If the property changes, toggle the
       // class name.
-      observer = function() {
+      var observer = function () {
         // Get the current value of the property
-        newClass = this._classStringForProperty(property);
-        elem = this.$();
+        var newClass = this._classStringForProperty(property);
+        var elem = this.$();
 
         // If we had previously added a class to the element, remove it.
         if (oldClass) {
           elem.removeClass(oldClass);
+          classNames.removeObject(oldClass);
         }
 
         // If necessary, add a new class. Make sure we keep track of it so
         // it can be removed in the future.
         if (newClass) {
           elem.addClass(newClass);
+          classNames.push(newClass);
           oldClass = newClass;
         } else {
           oldClass = null;
         }
       };
 
-      this.addObserver(property, this, observer);
+      this.addObserver(property.split(':')[0], this, observer);
 
       // Get the class name for the property at its current value
       dasherizedClass = this._classStringForProperty(property);
@@ -752,6 +616,7 @@ SC.CoreView.reopen(
         // been closed over by the observer.
         oldClass = dasherizedClass;
       }
+
     }, this);
   },
 
@@ -761,16 +626,16 @@ SC.CoreView.reopen(
 
     @param {SC.RenderBuffer} buffer
   */
-  _applyAttributeBindings: function(context) {
+  _applyAttributeBindings: function (context) {
     var attributeBindings = this.get('attributeBindings'),
         attributeValue, elem, type;
 
     if (!attributeBindings) { return; }
 
-    attributeBindings.forEach(function(attribute) {
+    attributeBindings.forEach(function (attribute) {
       // Create an observer to add/remove/change the attribute if the
       // JavaScript property changes.
-      var observer = function() {
+      var observer = function () {
         elem = this.$();
         var currentValue = elem.attr(attribute);
         attributeValue = this.get(attribute);
@@ -794,10 +659,10 @@ SC.CoreView.reopen(
       type = typeof attributeValue;
 
       if (type === 'string' || type === 'number') {
-        context.attr(attribute, attributeValue);
+        context.setAttr(attribute, attributeValue);
       } else if (attributeValue && type === 'boolean') {
         // Apply boolean attributes in the form attribute="attribute"
-        context.attr(attribute, attribute);
+        context.setAttr(attribute, attribute);
       }
     }, this);
   },
@@ -811,7 +676,7 @@ SC.CoreView.reopen(
     For example, if the view has property `isUrgent` that evaluates to true,
     passing `isUrgent` to this method will return `"is-urgent"`.
   */
-  _classStringForProperty: function(property) {
+  _classStringForProperty: function (property) {
     var split = property.split(':'), className = split[1];
     property = split[0];
 
@@ -840,52 +705,28 @@ SC.CoreView.reopen(
   },
 
   /**
-  @private
-
-    Invoked by createLayer() and updateLayer() to actually render a context.
-    This method calls the render() method on your view along with any
-    renderMixin() methods supplied by mixins you might have added.
-
-    You should not override this method directly. Nor should you call it. It is OLD.
-
-    @param {SC.RenderContext} context the render context
-    @param {Boolean} firstTime YES if this is creating a layer
-    @returns {void}
-  */
-  prepareContext: function(context, firstTime) {
-    // eventually, firstTime will be removed because it is ugly.
-    // for now, we will sense whether we are doing things the ugly way or not.
-    // if ugly, we will allow updates through.
-    if (firstTime !== false) { firstTime = YES; } // the GOOD code path :)
-
-    if (firstTime) {
-      this.renderToContext(context);
-    } else {
-      this.updateLayer(context);
-    }
-  },
-
-  /**
     Your render method should invoke this method to render any child views,
     especially if this is the first time the view will be rendered.  This will
     walk down the childView chain, rendering all of the children in a nested
     way.
 
     @param {SC.RenderContext} context the context
-    @param {Boolean} firstName true if the layer is being created
     @returns {SC.RenderContext} the render context
     @test in render
   */
-  renderChildViews: function(context, firstTime) {
-    var cv = this.get('childViews'), len = cv.length, idx, view ;
-    for (idx=0; idx<len; ++idx) {
-      view = cv[idx] ;
+  renderChildViews: function (context) {
+    var cv = this.get('childViews'), len = cv.length, idx, view;
+    for (idx = 0; idx < len; ++idx) {
+      view = cv[idx];
       if (!view) { continue; }
-      context = context.begin(view.get('tagName')) ;
-      view.renderToContext(context, firstTime);
-      context = context.end() ;
+      context = context.begin(view.get('tagName'));
+      view.renderToContext(context);
+      context = context.end();
     }
-    this._didRenderChildViews = YES;
+
+    // Track that renderChildViews was called in case it was called directly
+    // in a render method.
+    this._didRenderChildViews = true;
 
     return context;
   },
@@ -893,76 +734,95 @@ SC.CoreView.reopen(
   /** @private -
     override to add support for theming or in your view
   */
-  render: function() { },
-
-  /** @private -
-    Invokes the receivers didAppendLayerToDocument() method if it exists and
-    then invokes the same on all child views.
-  */
-
-  _notifyDidAppendToDocument: function() {
-    if (!this.get('hasLayout')) { this.notifyPropertyChange('frame'); }
-    if (this.didAppendToDocument) { this.didAppendToDocument(); }
-
-    var i=0, child, childLen, children = this.get('childViews');
-    for(i=0, childLen=children.length; i<childLen; i++) {
-      child = children[i];
-      if(child._notifyDidAppendToDocument){
-        child._notifyDidAppendToDocument();
-      }
-    }
-  },
-
-  childViewsObserver: function(){
-    var childViews = this.get('childViews'), i, iLen, child;
-    for(i=0, iLen = childViews.length; i<iLen; i++){
-      child = childViews[i];
-      if(child._notifyDidAppendToDocument){
-        child._notifyDidAppendToDocument();
-      }
-    }
-  }.observes('childViews'),
+  render: function () { },
 
   // ..........................................................
   // STANDARD RENDER PROPERTIES
   //
 
   /**
+    A list of properties on the view to translate dynamically into attributes on
+    the view's layer (element).
+
+    When the view is rendered, the value of each property listed in
+    attributeBindings will be inserted in the element.  If the value is a
+    Boolean, the attribute name itself will be inserted.  As well, as the
+    value of any of these properties changes, the layer will update itself
+    automatically.
+
+    This is an easy way to set custom attributes on the View without
+    implementing it through a render or update function.
+
+    For example,
+
+        // ...  MyApp.MyView
+
+        attributeBindings: ['aria-valuenow', 'disabled'],
+
+        'aria-valuenow': function () {
+          return this.get('value');
+        }.property('value').cacheable(), // adds 'aria-valuenow="{value}"' attribute
+
+        disabled: YES, // adds 'disabled="disabled"' attribute
+
+        // ...
+
+    @type Array
+    @default null
+  */
+  attributeBindings: null,
+
+
+  /**
     Tag name for the view's outer element.  The tag name is only used when
     a layer is first created.  If you change the tagName for an element, you
     must destroy and recreate the view layer.
 
-    @property {String}
+    @type String
+    @default 'div'
   */
   tagName: 'div',
 
   /**
-    The WAI-ARIA role of the control represented by this view. For example, a
-    button may have a role of type 'button', or a pane may have a role of
-    type 'alertdialog'. This property is used by assistive software to help
-    visually challenged users navigate rich web applications.
+    Standard CSS class names to apply to the view's outer element.  These class
+    names are used in addition to any defined on the view's superclass.
 
-    The full list of valid WAI-ARIA roles is available at:
-    http://www.w3.org/TR/wai-aria/roles#roles_categorization
-
-    @property {String}
-  */
-  ariaRole: null,
-
-  /**
-    Standard CSS class names to apply to the view's outer element.  This
-    property automatically inherits any class names defined by the view's
-    superclasses as well.
-
-    @property {Array}
+    @type Array
+    @default []
   */
   classNames: [],
+
+  /**
+    A list of local property names to translate dynamically into standard
+    CSS class names on your view's layer (element).
+
+    Each entry in the array should take the form "propertyName:css-class".
+    For example, "isRed:my-red-view" will cause the class "my-red-view" to
+    be appended if the property "isRed" is (or becomes) true, and removed
+    if it later becomes false (or null/undefined).
+
+    Optionally, you may provide just the property name, in which case it will
+    be dasherized and used as the class name.  For example, including
+    "isUpsideDown" will cause the view's isUpsideDown property to mediate the
+    class "is-upside-down".
+
+    Instead of a boolean value, your property may return a string, which will
+    be used as the class name for that entry.  Use caution when returning other
+    values; numbers will be appended verbatim and objects will be stringified,
+    leading to unintended results such as class="4" or class="Object object".
+
+    Class names mediated by these bindings are used in addition to any that
+    you've listed in the classNames property.
+
+    @type Array
+  */
+  classNameBindings: null,
 
   /**
     Tool tip property that will be set to the title attribute on the HTML
     rendered element.
 
-    @property {String}
+    @type String
   */
   toolTip: null,
 
@@ -970,12 +830,12 @@ SC.CoreView.reopen(
     The computed tooltip.  This is generated by localizing the toolTip
     property if necessary.
 
-    @property {String}
+    @type String
   */
-  displayToolTip: function() {
+  displayToolTip: function () {
     var ret = this.get('toolTip');
     return (ret && this.get('localize')) ? SC.String.loc(ret) : (ret || '');
-  }.property('toolTip','localize').cacheable(),
+  }.property('toolTip', 'localize').cacheable(),
 
   /**
     Determines if the user can select text within the view.  Normally this is
@@ -984,7 +844,7 @@ SC.CoreView.reopen(
     to YES will probably make your controls harder to use and it is not
     recommended.
 
-    @property {Boolean}
+    @type Boolean
     @readOnly
   */
   isTextSelectable: NO,
@@ -1006,13 +866,10 @@ SC.CoreView.reopen(
     Delegate's API.
 
     Implementation note:  'isVisible' is also effectively a display property,
-    but it is not declared as such because the same effect is implemented
-    inside _sc_isVisibleDidChange().  This avoids having two observers on
-    'isVisible', which is:
-      a.  More efficient
-      b.  More correct, because we can guarantee the order of operations
+    but it is not declared as such because it is observed separately in
+    order to manage the view's internal state.
 
-    @property {Array}
+    @type Array
     @readOnly
   */
   displayProperties: [],
@@ -1024,14 +881,14 @@ SC.CoreView.reopen(
   /** @property
     The nextResponder is usually the parentView.
   */
-  nextResponder: function() {
-    return this.get('parentView') ;
+  nextResponder: function () {
+    return this.get('parentView');
   }.property('parentView').cacheable(),
 
 
   /** @property
     Set to YES if your view is willing to accept first responder status.  This
-    is used when calculcating key responder loop.
+    is used when calculating key responder loop.
   */
   acceptsFirstResponder: NO,
 
@@ -1048,29 +905,26 @@ SC.CoreView.reopen(
      - register the view with the global views hash, which is used for event
        dispatch
   */
-  init: function() {
-    var parentView = this.get('parentView'),
-        path, root, lp, displayProperties ;
+  init: function () {
+    var childViews;
 
     sc_super();
 
     // Register the view for event handling. This hash is used by
     // SC.RootResponder to dispatch incoming events.
+    //@if (debug)
+    if (SC.View.views[this.get('layerId')]) {
+      throw new Error("Developer Error: A view with layerId, '%@', already exists.  Each view must have a unique layerId.".fmt(this.get('layerId')));
+    }
+    //@endif
     SC.View.views[this.get('layerId')] = this;
 
     // setup classNames
     this.classNames = this.get('classNames').slice();
 
     // setup child views.  be sure to clone the child views array first
-    this.childViews = this.get('childViews').slice() ;
-    this.createChildViews() ; // setup child Views
-
-    // register display property observers ..
-    // TODO: Optimize into class setup
-    displayProperties = this.get('displayProperties') ;
-    for(var i=0, l=displayProperties.length; i<l; i++) {
-      this.addObserver(displayProperties[i], this, this.displayDidChange);
-    }
+    childViews = this.childViews = this.get('childViews').slice();
+    this.createChildViews(); // setup child Views
   },
 
   /**
@@ -1085,12 +939,12 @@ SC.CoreView.reopen(
 
     @returns {void}
   */
-  awake: function() {
+  awake: function () {
     sc_super();
-    var childViews = this.get('childViews'), len = childViews.length, idx ;
-    for (idx=0; idx<len; ++idx) {
-      if (!childViews[idx]) { continue ; }
-      childViews[idx].awake() ;
+    var childViews = this.get('childViews'), len = childViews.length, idx;
+    for (idx = 0; idx < len; ++idx) {
+      if (!childViews[idx]) { continue; }
+      childViews[idx].awake();
     }
   },
 
@@ -1098,11 +952,11 @@ SC.CoreView.reopen(
     Frame describes the current bounding rect for your view.  This is always
     measured from the top-left corner of the parent view.
 
-    @property {Rect}
+    @type Rect
     @test in layoutStyle
   */
-  frame: function() {
-    return this.computeFrameWithParentFrame(null) ;
+  frame: function () {
+    return this.computeFrameWithParentFrame(null);
   }.property('useStaticLayout').cacheable(),    // We depend on the layout, but layoutDidChange will call viewDidResize to check the frame for us
 
   /**
@@ -1114,7 +968,7 @@ SC.CoreView.reopen(
 
     @returns {Rect} the computed frame
   */
-  computeFrameWithParentFrame: function() {
+  computeFrameWithParentFrame: function () {
     var layer,                            // The view's layer
         pv = this.get('parentView'),      // The view's parent view (if it exists)
         f;                                // The layer's coordinates in the document
@@ -1141,6 +995,33 @@ SC.CoreView.reopen(
     }
   },
 
+  /** @private Call the method recursively on all child views. */
+  _callOnChildViews: function (methodName, context) {
+    var childView,
+      childViews = this.get('childViews'),
+      method,
+      shouldContinue;
+
+    // Could have support for arguments, but accessing Arguments and using apply is slower than using call, so avoid it.
+    // args = SC.$A(arguments).slice(1);
+    for (var i = childViews.length - 1; i >= 0; i--) {
+      childView = childViews[i];
+
+      // We allow missing childViews in the array so ignore them.
+      if (!childView) { continue; }
+
+      // Look up the method on the child.
+      method = childView[methodName];
+      // method.apply(childView, args);  This is slower.
+      shouldContinue = method.call(childView, context);
+
+      // Recurse.
+      if (shouldContinue === undefined || shouldContinue) {
+        childView._callOnChildViews(methodName, context);
+      }
+    }
+  },
+
   /**
     The clipping frame returns the visible portion of the view, taking into
     account the clippingFrame of the parent view.  Keep in mind that
@@ -1150,9 +1031,9 @@ SC.CoreView.reopen(
     Normally this will be calculated based on the intersection of your own
     clippingFrame and your parentView's clippingFrame.
 
-    @property {Rect}
+    @type Rect
   */
-  clippingFrame: function() {
+  clippingFrame: function () {
     var f = this.get('frame'),
         ret = f,
         pv, cf;
@@ -1174,45 +1055,127 @@ SC.CoreView.reopen(
     This method is invoked whenever the clippingFrame changes, notifying
     each child view that its clippingFrame has also changed.
   */
-  _sc_view_clippingFrameDidChange: function() {
-    var cvs = this.get('childViews'), len = cvs.length, idx, cv ;
-    for (idx=0; idx<len; ++idx) {
-      cv = cvs[idx] ;
-
-      cv.notifyPropertyChange('clippingFrame') ;
-      cv._sc_view_clippingFrameDidChange();
-    }
+  _sc_view_clippingFrameDidChange: function () {
+    this.notifyPropertyChange('clippingFrame');
   },
 
   /**
-    Removes the child view from the parent view.
+    Removes the child view from the parent view *and* detaches it from the
+    document.
 
-    @param {SC.View} view
+    This does *not* remove the child view's layer (i.e. the node still exists,
+    but is no longer in the document) and does *not* destroy the child view
+    (i.e. it can still be re-attached to the document).
+
+    Note that if the child view uses a transitionOut plugin, it will not be
+    fully detached until the transition completes.  To force the view to detach
+    immediately you can pass true for the optional `immediately` argument.
+
+    If you wish to remove the child and discard it, use `removeChildAndDestroy`.
+
+    @param {SC.View} view The view to remove as a child view.
+    @param {Boolean} [immediately=false] Forces the child view to be removed immediately regardless if it uses a transitionOut plugin.
+    @see SC.View#removeChildAndDestroy
     @returns {SC.View} receiver
   */
-  removeChild: function(view) {
-    // update parent node
-    view.set('parentView', null) ;
+  removeChild: function (view, immediately) {
+    view._doDetach(immediately);
 
-    // remove view from childViews array.
+    // If the view will transition out, wait for the transition to complete
+    // before orphaning the view entirely.
+    if (!immediately && view.get('currentState') === SC.CoreView.ATTACHED_BUILDING_OUT) {
+      view.addObserver('isAttached', this, this._orphanChildView);
+    } else {
+      view._doOrphan();
+    }
+
+    return this;
+  },
+
+  /**
+    Removes the child view from the parent view, detaches it from the document
+    *and* destroys the view and its layer.
+
+    Note that if the child view uses a transitionOut plugin, it will not be
+    fully detached and destroyed until the transition completes.  To force the
+    view to detach immediately you can pass true for the optional `immediately`
+    argument.
+
+    If you wish to remove the child and keep it for further re-use, use
+    `removeChild`.
+
+    @param {SC.View} view The view to remove as a child view and destroy.
+    @param {Boolean} [immediately=false] Forces the child view to be removed and destroyed immediately regardless if it uses a transitionOut plugin.
+    @see SC.View#removeChild
+    @returns {SC.View} receiver
+  */
+  removeChildAndDestroy: function (view, immediately) {
+    view._doDetach(immediately);
+
+    // If the view will transition out, wait for the transition to complete
+    // before destroying the view entirely.
+    if (view.get('transitionOut') && !immediately) {
+      view.addObserver('isAttached', this, this._destroyChildView);
+    } else {
+      view.destroy(); // Destroys the layer and the view.
+    }
+
+    return this;
+  },
+
+  /**
+    Removes all children from the parentView *and* destroys them and their
+    layers.
+
+    Note that if any child view uses a transitionOut plugin, it will not be
+    fully removed until the transition completes.  To force all child views to
+    remove immediately you can pass true as the optional `immediately` argument.
+
+    Tip: If you know that there are no transitions for the child views,
+    you should pass true to optimize the document removal.
+
+    @param {Boolean} [immediately=false] Forces all child views to be removed immediately regardless if any uses a transitionOut plugin.
+    @returns {SC.View} receiver
+  */
+  removeAllChildren: function (immediately) {
     var childViews = this.get('childViews'),
-        idx = childViews.indexOf(view) ;
-    if (idx>=0) { childViews.removeAt(idx); }
+      len = childViews.get('length'),
+      i;
 
-    return this ;
-  },
+    // OPTIMIZATION!
+    // If we know that we're removing all children and we are rendered, lets do the document cleanup in one sweep.
+    if (immediately && this.get('_isRendered')) {
+      var layer,
+        parentNode;
 
-  /**
-    Removes all children from the parentView.
+      // If attached, detach and track our parent node so we can re-attach.
+      if (this.get('isAttached')) {
+        layer = this.get('layer');
+        parentNode = layer.parentNode;
 
-    @returns {SC.View} receiver
-  */
-  removeAllChildren: function() {
-    var childViews = this.get('childViews'), view ;
-    while (view = childViews.objectAt(childViews.get('length')-1)) {
-      this.removeChild(view) ;
+        this._doDetach();
+      }
+
+      // Destroy our layer and thus all the children's layers in one move.
+      this.destroyLayer();
+
+      // Remove all the children.
+      for (i = len - 1; i >= 0; i--) {
+        this.removeChildAndDestroy(childViews.objectAt(i), immediately);
+      }
+
+      // Recreate our layer (now empty).
+      this.createLayer();
+
+      // Reattach our layer.
+      if (parentNode && !this.get('isAttached')) { this._doAttach(parentNode); }
+    } else {
+      for (i = len - 1; i >= 0; i--) {
+        this.removeChildAndDestroy(childViews.objectAt(i), immediately);
+      }
     }
-    return this ;
+
+    return this;
   },
 
   /**
@@ -1221,51 +1184,90 @@ SC.CoreView.reopen(
 
     @returns {SC.View} receiver
   */
-  removeFromParent: function() {
-    var parent = this.get('parentView') ;
-    if (parent) { parent.removeChild(this) ; }
-    return this ;
+  removeFromParent: function () {
+    var parent = this.get('parentView');
+    if (parent) { parent.removeChild(this); }
+
+    return this;
+  },
+
+  /** @private Observer for child views that are being discarded after transitioning out. */
+  _destroyChildView: function (view) {
+    // Commence destroying of the view once it is detached.
+    if (!view.get('isAttached')) {
+      view.removeObserver('isAttached', this, this._destroyChildView);
+      view.destroy();
+    }
+  },
+
+  /** @private Observer for child views that are being orphaned after transitioning out. */
+  _orphanChildView: function (view) {
+    // Commence orphaning of the view once it is detached.
+    if (!view.get('isAttached')) {
+      view.removeObserver('isAttached', this, this._orphanChildView);
+      view._doOrphan();
+    }
   },
 
   /**
+    Completely destroys a view instance so that it may be garbage collected.
+
     You must call this method on a view to destroy the view (and all of its
-    child views). This will remove the view from any parent node, then make
-    sure that the DOM element managed by the view can be released by the
-    memory manager.
+    child views). This will remove the view from any parent, detach the
+    view's layer from the DOM if it is attached and clear the view's layer
+    if it is rendered.
+
+    Once a view is destroyed it can *not* be reused.
+
+    @returns {SC.View} receiver
   */
-  destroy: function() {
-    if (this.get('isDestroyed')) { return this; } // nothing to do
+  destroy: function () {
+    // Fast path!
+    if (this.get('isDestroyed')) { return this; }
 
-    this._destroy(); // core destroy method
+    // Do generic destroy. It takes care of mixins and sets isDestroyed to YES.
+    // Do this first, since it cleans up bindings that may apply to parentView
+    // (which we will soon null out).
+    var ret = sc_super();
 
-    // remove from parent if found
-    if (this.get('parentView')) { this.removeFromParent(); }
+    // If our parent is already destroyed, then we can defer destroying ourself
+    // and our own child views momentarily.
+    if (this.getPath('parentView.isDestroyed')) {
+      // Complete the destroy in a bit.
+      this.invokeNext(this._destroy);
+    } else {
+      // Immediately remove the layer if attached (ignores transitionOut). This
+      // will detach the layer for all child views as well.
+      this._doDetach(true);
 
-    //Do generic destroy. It takes care of mixins and sets isDestroyed to YES.
-    sc_super();
-    return this; // done with cleanup
-  },
+      // Clear the layer if rendered.  This will clear all child views layer
+      // references as well.
+      this._doDestroyLayer();
 
-  _destroy: function() {
-    if (this.get('isDestroyed')) { return this ; } // nothing to do
-
-    // destroy the layer -- this will avoid each child view destroying
-    // the layer over and over again...
-    this.destroyLayer() ;
-
-    // first destroy any children.
-    var childViews = this.get('childViews'), len = childViews.length, idx ;
-    if (len) {
-      childViews = childViews.slice() ;
-      for (idx=0; idx<len; ++idx) { childViews[idx].destroy() ; }
+      // Complete the destroy.
+      this._destroy();
     }
 
-    // next remove view from global hash
-    delete SC.View.views[this.get('layerId')] ;
-    delete this._CQ ;
-    delete this.page ;
+    // Remove the view from the global hash.
+    delete SC.View.views[this.get('layerId')];
 
-    return this ;
+    // Destroy any children.  Loop backwards since childViews will shrink.
+    var childViews = this.get('childViews');
+    for (var i = childViews.length - 1; i >= 0; i--) {
+      childViews[i].destroy();
+    }
+
+    return ret;
+  },
+
+  /** @private */
+  _destroy: function () {
+    // Orphan the view if adopted.
+    this._doOrphan();
+
+    // TODO: Deprecate owner in this sense.
+    this.set('owner', null);
+    delete this.page;
   },
 
   /**
@@ -1288,40 +1290,49 @@ SC.CoreView.reopen(
 
     @returns {SC.View} receiver
   */
-  createChildViews: function() {
+  createChildViews: function () {
     var childViews = this.get('childViews'),
         len        = childViews.length,
-        idx, key, views, view ;
+        isNoLongerValid = false,
+        idx, key, view;
 
-    this.beginPropertyChanges() ;
+    this.beginPropertyChanges();
 
     // swap the array
-    for (idx=0; idx<len; ++idx) {
-      if (key = (view = childViews[idx])) {
+    for (idx = 0; idx < len; ++idx) {
+      key = view = childViews[idx];
 
-        // is this is a key name, lookup view class
-        if (typeof key === SC.T_STRING) {
-          view = this[key];
-        } else {
-          key = null ;
-        }
-
-        if (!view) {
-          SC.Logger.error ("No view with name "+key+" has been found in "+this.toString());
-          // skip this one.
-          continue;
-        }
-
-        // createChildView creates the view if necessary, but also sets
-        // important properties, such as parentView
-        view = this.createChildView(view) ;
-        if (key) { this[key] = view ; } // save on key name if passed
+      // is this is a key name, lookup view class
+      if (typeof key === SC.T_STRING) {
+        view = this[key];
+      } else {
+        key = null;
       }
+
+      if (!view) {
+        //@if (debug)
+        SC.warn("Developer Warning: The child view named '%@' was not found in the view, %@.  This child view will be ignored.".fmt(key, this));
+        //@endif
+
+        // skip this one.
+        isNoLongerValid = true;
+        childViews[idx] = null;
+        continue;
+      }
+
+      // createChildView creates the view if necessary, but also sets
+      // important properties, such as parentView
+      view = this.createChildView(view);
+      if (key) { this[key] = view; } // save on key name if passed
+
       childViews[idx] = view;
     }
 
-    this.endPropertyChanges() ;
-    return this ;
+    // Set childViews to be only the valid array.
+    if (isNoLongerValid) { this.set('childViews', childViews.compact()); }
+
+    this.endPropertyChanges();
+    return this;
   },
 
   /**
@@ -1331,35 +1342,43 @@ SC.CoreView.reopen(
     automatically configure the correct settings on the new view instance to
     act as a child of the parent.
 
-    @param {Class} viewClass
-    @param {Hash} attrs optional attributes to add
+    If the given view is a class, then createdByParent will be set to true on
+    the returned instance.
+
+    @param {Class} view A view class to create or view instance to prepare.
+    @param {Object} [attrs={}] attributes to add
     @returns {SC.View} new instance
     @test in createChildViews
   */
-  createChildView: function(view, attrs) {
+  createChildView: function (view, attrs) {
     if (!view.isClass) {
       attrs = view;
     } else {
       // attrs should always exist...
-      if (!attrs) { attrs = {} ; }
-      // clone the hash that was given so we dont pollute it if it's being reused
+      if (!attrs) { attrs = {}; }
+      // clone the hash that was given so we do not pollute it if it's being reused
       else { attrs = SC.clone(attrs); }
     }
 
-    attrs.owner = attrs.parentView = this ;
+    attrs.owner = attrs.parentView = this;
 
     // We need to set isVisibleInWindow before the init method is called on the view
     // The prototype check is a bit hackish and should be revisited - PDW
-    if (view.isClass && view.prototype.hasVisibility) {
-      attrs.isVisibleInWindow = this.get('isVisibleInWindow');
-    }
+    // if (view.isClass && view.prototype.hasVisibility) {
+    //   attrs.isVisibleInWindow = this.get('isVisibleInWindow');
+    // }
 
-    if (!attrs.page) { attrs.page = this.page ; }
+    if (!attrs.page) { attrs.page = this.page; }
 
     // Now add this to the attributes and create.
-    if (view.isClass) { view = view.create(attrs); }
+    if (view.isClass) {
+      // Track that we created this view.
+      attrs.createdByParent = true;
 
-    return view ;
+      view = view.create(attrs);
+    }
+
+    return view;
   },
 
   /** walk like a duck */
@@ -1375,14 +1394,14 @@ SC.CoreView.reopen(
     to override this function to always return YES , instead of setting
     isTextSelectable to true.
 
-    For example in textfield you dont want to enable textSelection on the text
+    For example in textfield you do not want to enable textSelection on the text
     hint only on the actual text you are entering. You can achieve that by
     only overriding this method.
 
     @param evt {SC.Event} the selectstart event
     @returns YES if selectable
   */
-  selectStart: function(evt) {
+  selectStart: function (evt) {
     return this.get('isTextSelectable');
   },
 
@@ -1390,15 +1409,217 @@ SC.CoreView.reopen(
     Used to block the contextMenu per view.
 
     @param evt {SC.Event} the contextmenu event
-    @returns YES if the contextmenu can show up
+    @returns YES if the contextmenu will be allowed to show up
   */
-  contextMenu: function(evt) {
-    if (this.get('isContextMenuEnabled')) { return YES; }
-  }
+  contextMenu: function (evt) {
+    if (this.get('isContextMenuEnabled')) {
+      evt.allowDefault();
+      return YES;
+    }
+  },
+
+  // ------------------------------------------------------------------------
+  // Transitions
+  //
+
+  /**
+    The transition plugin to use when this view is appended to the DOM.
+
+    SC.CoreView uses a pluggable transition architecture where the transition
+    setup, execution and cleanup can be handled by a specified transition
+    plugin.
+
+    There are a number of pre-built transition plugins available in the
+    foundation framework:
+
+      SC.View.BOUNCE
+      SC.View.FADE
+      SC.View.SLIDE
+      SC.View.SCALE
+      SC.View.SPRING
+
+    You can even provide your own custom transition plugins.  Just create a
+    transition object that conforms to the SC.TransitionProtocol protocol.
+
+    @type Object (SC.TransitionProtocol)
+    @default null
+    @since Version 1.10
+  */
+  transitionIn: null,
+
+  /**
+    The options for the given transition in plugin.
+
+    These options are specific to the current transition plugin used and are
+    used to modify the transition animation.  To determine what options
+    may be used for a given plugin and to see what the default options are,
+    see the documentation for the transition plugin being used.
+
+    Most transitions will accept a duration and timing option, but may
+    also use other options.  For example, SC.View.SLIDE_IN accepts options
+    like:
+
+        transitionInOptions: {
+          direction: 'left',
+          duration: 0.25,
+          timing: 'ease-in-out'
+        }
+
+    @type Object
+    @default null
+    @since Version 1.10
+  */
+  transitionInOptions: null,
+
+  /**
+    The transition plugin to use when this view is removed from the DOM.
+
+    SC.View uses a pluggable transition architecture where the transition setup,
+    execution and cleanup can be handled by a specified transition plugin.
+
+    There are a number of pre-built transition plugins available in the
+    foundation framework:
+
+      SC.View.BOUNCE
+      SC.View.FADE
+      SC.View.SLIDE
+      SC.View.SCALE
+      SC.View.SPRING
+
+    You can even provide your own custom transition plugins.  Just create a
+    transition object that conforms to the SC.TransitionProtocol protocol.
+
+    @type Object (SC.TransitionProtocol)
+    @default null
+    @since Version 1.10
+  */
+  transitionOut: null,
+
+  /**
+    The options for the given transition out plugin.
+
+    These options are specific to the current transition plugin used and are
+    used to modify the transition animation.  To determine what options
+    may be used for a given plugin and to see what the default options are,
+    see the documentation for the transition plugin being used.
+
+    Most transitions will accept a duration and timing option, but may
+    also use other options.  For example, SC.View.SLIDE accepts options
+    like:
+
+        transitionOutOptions: {
+          direction: 'right',
+          duration: 0.15,
+          timing: 'ease-in'
+        }
+
+    @type Object
+    @default null
+    @since Version 1.10
+  */
+  transitionOutOptions: null,
+
+  /**
+    The transition plugin to use when this view is made shown from being
+    hidden.
+
+    SC.CoreView uses a pluggable transition architecture where the transition setup,
+    execution and cleanup can be handled by a specified transition plugin.
+
+    There are a number of pre-built transition plugins available in the
+    foundation framework:
+
+      SC.View.BOUNCE
+      SC.View.FADE
+      SC.View.SLIDE
+      SC.View.SCALE
+      SC.View.SPRING
+
+    You can even provide your own custom transition plugins.  Just create a
+    transition object that conforms to the SC.TransitionProtocol protocol.
+
+    @type Object (SC.TransitionProtocol)
+    @default null
+    @since Version 1.10
+  */
+  transitionShow: null,
+
+  /**
+    The options for the given transition show plugin.
+
+    These options are specific to the current transition plugin used and are
+    used to modify the transition animation.  To determine what options
+    may be used for a given plugin and to see what the default options are,
+    see the documentation for the transition plugin being used.
+
+    Most transitions will accept a duration and timing option, but may
+    also use other options.  For example, SC.View.SLIDE accepts options
+    like:
+
+        transitionShowOptions: {
+          direction: 'left',
+          duration: 0.25,
+          timing: 'ease-in-out'
+        }
+
+    @type Object
+    @default null
+    @since Version 1.10
+  */
+  transitionShowOptions: null,
+
+  /**
+    The transition plugin to use when this view is hidden after being shown.
+
+    SC.View uses a pluggable transition architecture where the transition setup,
+    execution and cleanup can be handled by a specified transition plugin.
+
+    There are a number of pre-built transition plugins available in the
+    foundation framework:
+
+      SC.View.BOUNCE
+      SC.View.FADE
+      SC.View.SLIDE
+      SC.View.SCALE
+      SC.View.SPRING
+
+    You can even provide your own custom transition plugins.  Just create a
+    transition object that conforms to the SC.TransitionProtocol protocol.
+
+    @type Object (SC.TransitionProtocol)
+    @default null
+    @since Version 1.10
+  */
+  transitionHide: null,
+
+  /**
+    The options for the given transition hide plugin.
+
+    These options are specific to the current transition plugin used and are
+    used to modify the transition animation.  To determine what options
+    may be used for a given plugin and to see what the default options are,
+    see the documentation for the transition plugin being used.
+
+    Most transitions will accept a duration and timing option, but may
+    also use other options.  For example, SC.View.SLIDE accepts options
+    like:
+
+        transitionHideOptions: {
+          direction: 'right',
+          duration: 0.15,
+          timing: 'ease-in'
+        }
+
+    @type Object
+    @default null
+    @since Version 1.10
+  */
+  transitionHideOptions: null
 
 });
 
-SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
+SC.CoreView.mixin(
+  /** @scope SC.CoreView */ {
 
   /** @private walk like a duck -- used by SC.Page */
   isViewClass: YES,
@@ -1412,23 +1633,23 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
     @returns {Class} SC.View subclass to create
     @function
   */
-  design: function() {
+  design: function () {
     if (this.isDesign) {
       // @if (debug)
-      SC.Logger.warn("SC.View#design called twice for %@.".fmt(this));
+      SC.Logger.warn("Developer Warning: .design() was called twice for %@.".fmt(this));
       // @endif
       return this;
     }
 
     var ret = this.extend.apply(this, arguments);
-    ret.isDesign = YES ;
+    ret.isDesign = YES;
     if (SC.ViewDesigner) {
       SC.ViewDesigner.didLoadDesign(ret, this, SC.A(arguments));
     }
-    return ret ;
+    return ret;
   },
 
-  extend: function() {
+  extend: function () {
     var last = arguments[arguments.length - 1];
 
     if (last && !SC.none(last.theme)) {
@@ -1442,71 +1663,71 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
   /**
     Helper applies the layout to the prototype.
   */
-  layout: function(layout) {
-    this.prototype.layout = layout ;
-    return this ;
+  layout: function (layout) {
+    this.prototype.layout = layout;
+    return this;
   },
 
   /**
     Helper applies the classNames to the prototype
   */
-  classNames: function(sc) {
+  classNames: function (sc) {
     sc = (this.prototype.classNames || []).concat(sc);
     this.prototype.classNames = sc;
-    return this ;
+    return this;
   },
 
   /**
     Help applies the tagName
   */
-  tagName: function(tg) {
+  tagName: function (tg) {
     this.prototype.tagName = tg;
-    return this ;
+    return this;
   },
 
   /**
     Helper adds the childView
   */
-  childView: function(cv) {
+  childView: function (cv) {
     var childViews = this.prototype.childViews || [];
     if (childViews === this.superclass.prototype.childViews) {
       childViews = childViews.slice();
     }
-    childViews.push(cv) ;
+    childViews.push(cv);
     this.prototype.childViews = childViews;
-    return this ;
+    return this;
   },
 
   /**
     Helper adds a binding to a design
   */
-  bind: function(keyName, path) {
+  bind: function (keyName, path) {
     var p = this.prototype, s = this.superclass.prototype;
-    var bindings = p._bindings ;
+    var bindings = p._bindings;
     if (!bindings || bindings === s._bindings) {
-      bindings = p._bindings = (bindings || []).slice() ;
+      bindings = p._bindings = (bindings || []).slice();
     }
 
     keyName = keyName + "Binding";
-    p[keyName] = path ;
+    p[keyName] = path;
     bindings.push(keyName);
 
-    return this ;
+    return this;
   },
 
   /**
     Helper sets a generic property on a design.
   */
-  prop: function(keyName, value) {
+  prop: function (keyName, value) {
     this.prototype[keyName] = value;
-    return this ;
+    return this;
   },
 
   /**
     Used to construct a localization for a view.  The default implementation
     will simply return the passed attributes.
   */
-  localization: function(attrs, rootElement) {
+  localization: function (attrs, rootElement) {
     // add rootElement
     if (rootElement) attrs.rootElement = SC.$(rootElement)[0];
     return attrs;
@@ -1522,21 +1743,21 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
     @param {Hash} attrs
     @returns {SC.View} instance
   */
-  viewFor: function(element, attrs) {
+  viewFor: function (element, attrs) {
     var args = SC.$A(arguments); // prepare to edit
     if (SC.none(element)) {
       args.shift(); // remove if no element passed
-    } else args[0] = { rootElement: SC.$(element)[0] } ;
-    var ret = this.create.apply(this, arguments) ;
+    } else args[0] = { rootElement: SC.$(element)[0] };
+    var ret = this.create.apply(this, arguments);
     args = args[0] = null;
-    return ret ;
+    return ret;
   },
 
   /**
     Create a new view with the passed attributes hash.  If you have the
     Designer module loaded, this will also create a peer designer if needed.
   */
-  create: function() {
+  create: function () {
     var last = arguments[arguments.length - 1];
 
     if (last && last.theme) {
@@ -1544,11 +1765,11 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
       delete last.theme;
     }
 
-    var C=this, ret = new C(arguments);
+    var C = this, ret = new C(arguments);
     if (SC.ViewDesigner) {
       SC.ViewDesigner.didCreateView(ret, SC.$A(arguments));
     }
-    return ret ;
+    return ret;
   },
 
   /**
@@ -1562,11 +1783,11 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
     @param rootElement {String} optional rootElement with prepped HTML
     @returns {SC.View} receiver
   */
-  loc: function(loc) {
+  loc: function (loc) {
     var childLocs = loc.childViews;
     delete loc.childViews; // clear out child views before applying to attrs
 
-    this.applyLocalizedAttributes(loc) ;
+    this.applyLocalizedAttributes(loc);
     if (SC.ViewDesigner) {
       SC.ViewDesigner.didLoadLocalization(this, SC.$A(arguments));
     }
@@ -1574,7 +1795,7 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
     // apply localization recursively to childViews
     var childViews = this.prototype.childViews, idx = childViews.length,
       viewClass;
-    while(--idx>=0) {
+    while (--idx >= 0) {
       viewClass = childViews[idx];
       loc = childLocs[idx];
       if (loc && viewClass && typeof viewClass === SC.T_STRING) SC.String.loc(viewClass, loc);
@@ -1584,16 +1805,16 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
   },
 
   /**
-    Internal method actually updates the localizated attributes on the view
+    Internal method actually updates the localized attributes on the view
     class.  This is overloaded in design mode to also save the attributes.
   */
-  applyLocalizedAttributes: function(loc) {
-    SC.mixin(this.prototype, loc) ;
+  applyLocalizedAttributes: function (loc) {
+    SC.mixin(this.prototype, loc);
   },
 
   views: {}
 
-}) ;
+});
 
 // .......................................................
 // OUTLET BUILDER
@@ -1605,24 +1826,24 @@ SC.CoreView.mixin(/** @scope SC.CoreView.prototype */ {
   define an outlet that points to another view or object.  The root object
   used for the path will be the receiver.
 */
-SC.outlet = function(path, root) {
-  return function(key) {
-    return (this[key] = SC.objectForPropertyPath(path, (root !== undefined) ? root : this)) ;
+SC.outlet = function (path, root) {
+  return function (key) {
+    return (this[key] = SC.objectForPropertyPath(path, (root !== undefined) ? root : this));
   }.property();
 };
 
 /** @private on unload clear cached divs. */
-SC.CoreView.unload = function() {
+SC.CoreView.unload = function () {
   // delete view items this way to ensure the views are cleared.  The hash
   // itself may be owned by multiple view subclasses.
   var views = SC.View.views;
   if (views) {
-   for(var key in views) {
-     if (!views.hasOwnProperty(key)) continue ;
-     delete views[key];
-   }
+    for (var key in views) {
+      if (!views.hasOwnProperty(key)) continue;
+      delete views[key];
+    }
   }
-} ;
+};
 
 /**
   @class
@@ -1643,7 +1864,7 @@ SC.CoreView.unload = function() {
 
    - `init` -- override this method for any general object setup (such as
      observers, starting timers and animations, etc) that you need to happen
-     everytime the view is created, regardless of whether or not its layer
+     every time the view is created, regardless of whether or not its layer
      exists yet.
    - `render` -- override this method to generate or update your HTML to reflect
      the current state of your view.  This method is called both when your view
@@ -1674,11 +1895,11 @@ SC.CoreView.unload = function() {
 */
 SC.View = SC.CoreView.extend(/** @scope SC.View.prototype */{
   classNames: ['sc-view'],
-  
-  displayProperties: ['isFirstResponder']
+
+  displayProperties: []
 });
 
 //unload views for IE, trying to collect memory.
-if(SC.browser.msie) SC.Event.add(window, 'unload', SC.View, SC.View.unload) ;
+if (SC.browser.isIE) SC.Event.add(window, 'unload', SC.View, SC.View.unload);
 
 

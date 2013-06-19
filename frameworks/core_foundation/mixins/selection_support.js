@@ -23,7 +23,7 @@
   content you want the selection to reflect.
 
   Add this mixin to any controller you want to manage selection.  It is
-  already applied to the CollectionController and ArrayController.
+  already applied to SC.ArrayController.
 
   @since SproutCore 1.0
 */
@@ -35,28 +35,28 @@ SC.SelectionSupport = {
   /**
     Walk like a duck.
 
-    @property {Boolean}
+    @type Boolean
   */
   hasSelectionSupport: YES,
 
   /**
     If YES, selection is allowed. Default is YES.
 
-    @property {Boolean}
+    @type Boolean
   */
   allowsSelection: YES,
 
   /**
     If YES, multiple selection is allowed. Default is YES.
 
-    @property {Boolean}
+    @type Boolean
   */
   allowsMultipleSelection: YES,
 
   /**
     If YES, allow empty selection Default is YES.
 
-    @property {Boolean}
+    @type Boolean
   */
   allowsEmptySelection: YES,
 
@@ -65,7 +65,7 @@ SC.SelectionSupport = {
     have groups or want to otherwise limit the kinds of objects that can be
     selected.
 
-    the default imeplementation returns firstObject property.
+    the default implementation returns firstObject property.
 
     @returns {Object} first selectable object
   */
@@ -138,7 +138,7 @@ SC.SelectionSupport = {
   /**
     YES if the receiver currently has a non-zero selection.
 
-    @property {Boolean}
+    @type Boolean
   */
   hasSelection: function() {
     var sel = this.get('selection');

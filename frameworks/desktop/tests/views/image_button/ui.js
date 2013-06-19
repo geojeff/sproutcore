@@ -11,12 +11,10 @@ var pane = SC.ControlTestPane.design({height:24})
     image: 'start'
   });
 
-pane.show();
-
-module('SC.ImageButtonView ui');
+module('SC.ImageButtonView ui', pane.standardSetup());
 
 test("Check if image class is set properly on ImageButton", function() {
-  var viewElem = pane.view('default').$('div');
+  var viewElem = pane.view('default').$();
   ok(viewElem.hasClass('start'), 'Icon class set initially to "start"');
 });
 
@@ -47,6 +45,6 @@ test("Check if image class is set properly on ImageButton if changed", function(
   var viewElem = pane.view('iconchange');
   viewElem.set('image','stop');
   SC.RunLoop.end(); // force redraw...
-  var newViewElem = pane.view('iconchange').$('div');
+  var newViewElem = pane.view('iconchange').$();
   ok(newViewElem.hasClass('stop'), 'Icon class has correctly changed to "stop"');
 });

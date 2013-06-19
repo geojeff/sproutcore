@@ -77,9 +77,6 @@ var pane = SC.ControlTestPane.extend()
     layout: { left: 10, top: 10, width: 100, height: 50 }
   });
 
-pane.show();
-
-
 module("SC.pointInElement()", {
   setup: function(){
     htmlbody('<style> .custom { background-color: #BBF; } .padding { padding: 10px !important; } .border { border: 10px red solid !important;} .margin { margin: 10px !important; } .padding-em { padding: 10em !important; } .border-em { border: 10em red solid !important;} .margin-em { margin: 10em !important; } .child { background-color: #AAA; width: 80px; height: 80px; } .absolute { position: absolute; top: 10px; left: 10px; } </style>');
@@ -99,8 +96,8 @@ function runChecks(element, offsetAdjust, values) {
       top = jqOffset.top;
 
   equals(SC.pointInElement({x: left + offsetAdjust, y: top + offsetAdjust}, element, 'padding'), values[0], 'point {left: %@, top: %@} within the element\'s padding'.fmt(offsetAdjust, offsetAdjust));
-  equals(SC.pointInElement({x: left + offsetAdjust, y: top + offsetAdjust}, element, 'border'), values[1], 'point {left: %@, top: %@} within the element\'s padding'.fmt(offsetAdjust, offsetAdjust));
-  equals(SC.pointInElement({x: left + offsetAdjust, y: top + offsetAdjust}, element, 'margin'), values[2], 'point {left: %@, top: %@} within the element\'s padding'.fmt(offsetAdjust, offsetAdjust));
+  equals(SC.pointInElement({x: left + offsetAdjust, y: top + offsetAdjust}, element, 'border'), values[1], 'point {left: %@, top: %@} within the element\'s border'.fmt(offsetAdjust, offsetAdjust));
+  equals(SC.pointInElement({x: left + offsetAdjust, y: top + offsetAdjust}, element, 'margin'), values[2], 'point {left: %@, top: %@} within the element\'s margin'.fmt(offsetAdjust, offsetAdjust));
 }
 
 test("A plain child element", function() {

@@ -17,7 +17,7 @@ sc_require('ext/function');
 /**
   If {@link SC.Logger.format} is true, this delimiter will be put between arguments.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_LOG_DELIMITER = ", ";
 
@@ -25,7 +25,7 @@ SC.LOGGER_LOG_DELIMITER = ", ";
   If {@link SC.Logger.error} falls back onto {@link SC.Logger.log}, this will be
   prepended to the output.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_LOG_ERROR = "ERROR: ";
 
@@ -33,7 +33,7 @@ SC.LOGGER_LOG_ERROR = "ERROR: ";
   If {@link SC.Logger.info} falls back onto {@link SC.Logger.log}, this will be
   prepended to the output.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_LOG_INFO = "INFO:  ";
 
@@ -41,7 +41,7 @@ SC.LOGGER_LOG_INFO = "INFO:  ";
   If {@link SC.Logger.warn} falls back onto {@link SC.Logger.log}, this will be
   prepended to the output.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_LOG_WARN = "WARN:  ";
 
@@ -49,7 +49,7 @@ SC.LOGGER_LOG_WARN = "WARN:  ";
   If {@link SC.Logger.debug} falls back onto {@link SC.Logger.log}, this will be
   prepended to the output.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_LOG_DEBUG = "DEBUG: ";
 
@@ -57,7 +57,7 @@ SC.LOGGER_LOG_DEBUG = "DEBUG: ";
   If {@link SC.Logger.group} falls back onto {@link SC.Logger.log}, this will
   be prepended to the output.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_LOG_GROUP_HEADER = "** %@";       // The variable is the group title
 
@@ -65,7 +65,7 @@ SC.LOGGER_LOG_GROUP_HEADER = "** %@";       // The variable is the group title
   If the reporter does not support group(), then we’ll add our own indentation
   to our output.  This constant represents one level of indentation.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_LOG_GROUP_INDENTATION = "    ";
 
@@ -73,7 +73,7 @@ SC.LOGGER_LOG_GROUP_INDENTATION = "    ";
   When reporting recorded log messages, the timestamp is included with this
   prefix.
 
-  @property {String}
+  @type String
 */
 SC.LOGGER_RECORDED_LOG_TIMESTAMP_PREFIX = "%@:  ";
 
@@ -150,6 +150,37 @@ SC.Logger = SC.Object.create(
   //
 
   /**
+    An optional prefix that will be prepended to all log messages, but not any
+    group titles.
+
+    @type String
+  */
+  messagePrefix: null,
+
+
+  /**
+    An optional prefix that will be prepended to all log messages that are
+    output to the browser console, but not those that are recorded.  If you
+    specify both this and a 'messagePrefix', both will be output, and only the
+    'messagePrefix' will be recorded.
+
+    @type String
+  */
+  outputMessagePrefix: null,
+
+
+  /**
+    An optional prefix that will be prepended to all log messages that are
+    recorded, but not those that are output to the browser console.  If you
+    specify both this and a 'messagePrefix', both will be recorded, and only the
+    'messagePrefix' will be output to the browser console.
+
+    @type String
+  */
+  recordedMessagePrefix: null,
+
+
+  /**
     The current log level determining what is output to the reporter object
     (usually your browser’s console).  Valid values are:
 
@@ -169,8 +200,8 @@ SC.Logger = SC.Object.create(
 
 
   /**
-    The current log level determining what is output to the reporter object
-    (usually your browser’s console).  Valid values are the same as with
+    The current log level determining what is recorded to the
+    'recordedLogMessages' buffer.  Valid values are the same as with
     'logOutputLevel':
 
       -  SC.LOGGER_LEVEL_DEBUG
@@ -181,7 +212,7 @@ SC.Logger = SC.Object.create(
 
     If you do not specify this value, it will default to SC.LOGGER_LEVEL_NONE.
 
-    @property: {Constant}
+    @type Constant
   */
   logRecordingLevel: SC.LOGGER_LEVEL_NONE,
 
@@ -209,7 +240,7 @@ SC.Logger = SC.Object.create(
       originalArguments:  {Arguments}    // optional
       timestamp:          {Date}
     }
-    
+
     Group entry (either beginning or end of):
     {
       type:         {Constant}     SC.LOGGER_LEVEL_DEBUG, etc.
@@ -220,7 +251,7 @@ SC.Logger = SC.Object.create(
     }
 </pre>
 
-    @property {Array}
+    @type Array
   */
   recordedLogMessages: null,
 
@@ -232,7 +263,7 @@ SC.Logger = SC.Object.create(
     older messages out of the array, so the most recent messages will be
     saved.
 
-    @property {Number}
+    @type Number
   */
   recordedLogMessagesMaximumLength: 500,
 
@@ -245,7 +276,7 @@ SC.Logger = SC.Object.create(
     mechanism avoids thrashing the array for each log message once the
     maximum is reached.)  When pruning, the most recent messages will be saved.
 
-    @property {Number}
+    @type Number
   */
   recordedLogMessagesPruningMinimumLength: 100,
 
@@ -267,7 +298,7 @@ SC.Logger = SC.Object.create(
   /**
     Computed property that checks for the existence of the reporter object.
 
-    @property {Boolean}
+    @type Boolean
   */
   exists: function() {
     return !SC.none(this.get('reporter'));
@@ -283,7 +314,7 @@ SC.Logger = SC.Object.create(
     simply utilize the message recording mechanism than put up a bunch of
     alerts when there is no browser console.
 
-    @property {Boolean}
+    @type Boolean
   */
   fallBackOnAlert: NO,
 
@@ -292,7 +323,7 @@ SC.Logger = SC.Object.create(
     The reporter is the object which implements the actual logging functions.
 
     @default The browser’s console
-    @property {Object}
+    @type Object
   */
   reporter: console,
 
@@ -350,7 +381,7 @@ SC.Logger = SC.Object.create(
 
   /**
     Begins a new group in the console and/or in the recorded array provided
-    the respective log levels are set to ouput/record 'debug' messages.
+    the respective log levels are set to output/record 'debug' messages.
     Every message after this call (at any log level) will be indented for
     readability until a matching {@link SC.Logger.debugGroupEnd} is invoked,
     and you can create as many levels as you want.
@@ -445,7 +476,7 @@ SC.Logger = SC.Object.create(
 
   /**
     Begins a new group in the console and/or in the recorded array provided
-    the respective log levels are set to ouput/record 'info' messages.
+    the respective log levels are set to output/record 'info' messages.
     Every message after this call (at any log level) will be indented for
     readability until a matching {@link SC.Logger.infoGroupEnd} is invoked,
     and you can create as many levels as you want.
@@ -541,7 +572,7 @@ SC.Logger = SC.Object.create(
 
   /**
     Begins a new group in the console and/or in the recorded array provided
-    the respective log levels are set to ouput/record 'warn' messages.
+    the respective log levels are set to output/record 'warn' messages.
     Every message after this call (at any log level) will be indented for
     readability until a matching {@link SC.Logger.warnGroupEnd} is invoked,
     and you can create as many levels as you want.
@@ -635,7 +666,7 @@ SC.Logger = SC.Object.create(
 
   /**
     Begins a new group in the console and/or in the recorded array provided
-    the respective log levels are set to ouput/record 'error' messages.
+    the respective log levels are set to output/record 'error' messages.
     Every message after this call (at any log level) will be indented for
     readability until a matching {@link SC.Logger.errorGroupEnd} is invoked,
     and you can create as many levels as you want.
@@ -804,7 +835,7 @@ SC.Logger = SC.Object.create(
         message = entry.message;
         if (message) {
           // It's a message entry.  Were arguments used, or did we format a
-          // message?  If arguments were used, we need to stringfy those
+          // message?  If arguments were used, we need to stringify those
           // instead of using the message.
           originalArguments = entry.originalArguments;
           line =  prefix + this._indentation(indentation);
@@ -851,8 +882,20 @@ SC.Logger = SC.Object.create(
     @returns {Boolean} Whether or not anything was logged
   */
   log: function() {
-    var reporter = this.get('reporter'),
-        ret      = NO;
+    var reporter     = this.get('reporter'),
+        message      = arguments[0],
+        prefix       = this.get('messagePrefix'),
+        outputPrefix = this.get('outputMessagePrefix'),
+        ret          = NO;
+
+    // If the first argument is a string and a prefix was specified, use it.
+    if (message  &&  SC.typeOf(message) === SC.T_STRING) {
+      if (prefix  ||  outputPrefix) {
+        if (prefix)       message = prefix       + message;
+        if (outputPrefix) message = outputPrefix + message;
+        arguments[0] = message;
+      }
+    }
 
     // Log through the reporter.
     if (this.get('exists')) {
@@ -1072,7 +1115,7 @@ SC.Logger = SC.Object.create(
         this.set('logOutputLevel', SC.LOGGER_LEVEL_INFO);
       }
     }
-  
+
     this.debugEnabledDidChange();
   },
 
@@ -1106,7 +1149,8 @@ SC.Logger = SC.Object.create(
     // Are we configured to show this type?
     var shouldOutput = this._shouldOutputType(type),
         shouldRecord = this._shouldRecordType(type),
-        hasOtherArguments, i, len, args, output, entry;
+        hasOtherArguments, i, len, args, output, entry, prefix,
+        outputPrefix, recordedPrefix;
 
     // If we're neither going to output nor record the message, then stop now.
     if (!(shouldOutput || shouldRecord)) return;
@@ -1134,18 +1178,26 @@ SC.Logger = SC.Object.create(
       }
     }
 
+    // If a message prefix was specified, use it.
+    prefix = this.get('messagePrefix');
+    if (prefix) message = prefix + message;
+
     if (shouldOutput) {
+      outputPrefix = this.get('outputMessagePrefix');
+
       // We only want to pass the original arguments to _outputMessage() if we
       // didn't format the message ourselves.
       args = automaticallyFormat ? null : originalArguments;
-      this._outputMessage(type, null, this._outputIndentationLevel, message, args);
+      this._outputMessage(type, null, this._outputIndentationLevel, (outputPrefix ? outputPrefix + message : message), args);
     }
 
     // If we're recording the log, append the message now.
     if (shouldRecord) {
+      recordedPrefix = this.get('recordedMessagePrefix');
+
       entry = {
         type:      type,
-        message:   message ? message : YES,
+        message:   message ? (recordedPrefix ? recordedPrefix + message : message) : YES,
         timestamp: new Date()
       };
 
@@ -1243,7 +1295,7 @@ SC.Logger = SC.Object.create(
     if (shouldOutput) {
       // Decrease our indentation level to accommodate the group.
       this._outputIndentationLevel--;
-      
+
       if (this.get('exists')) {
         // Do we have reporter.groupEnd defined as a function?  If not, we
         // simply won't output anything.
@@ -1346,9 +1398,8 @@ SC.Logger = SC.Object.create(
       // If we formatted, just include the message.  Otherwise, include all
       // the original arguments.
       if (!originalArguments) {
-        output = "";
-        if (timestampStr) output = timestampStr;
-        if (shouldIndent) output =+ this._indentation(indentation);
+        output = timestampStr ? timestampStr : "";
+        if (shouldIndent) output += this._indentation(indentation);
         output += message;
         reporter[type](output);
       }
@@ -1362,14 +1413,14 @@ SC.Logger = SC.Object.create(
         if (timestampStr) prefix = timestampStr;
         if (shouldIndent) prefix += this._indentation(indentation);
         if (prefix) args.splice(0, 0, prefix);
-        
+
         if (func.apply) {
           func.apply(reporter, args);
         }
         else {
           // In IE8, passing the arguments as an array isn't ideal, but it's
           // pretty much all we can do because we can't call apply().
-          reporter[type](args);            
+          reporter[type](args);
         }
       }
     }
@@ -1460,7 +1511,7 @@ SC.Logger = SC.Object.create(
     if (len > this.get('recordedLogMessagesMaximumLength')) {
       recordedMessages.splice(0, (len - this.get('recordedLogMessagesPruningMinimumLength')));
     }
-    
+
     // Notify that the array content changed.
     recordedMessages.enumerableContentDidChange();
   },
@@ -1493,11 +1544,11 @@ SC.Logger = SC.Object.create(
   */
   _argumentsToString: function() {
     var ret       = "",
-        delimeter = SC.LOGGER_LOG_DELIMITER,
+        delimiter = SC.LOGGER_LOG_DELIMITER,
         i, len;
 
     for (i = 0, len = (arguments.length - 1);  i < len;  ++i) {
-      ret += arguments[i] + delimeter;
+      ret += arguments[i] + delimiter;
     }
     ret += arguments[len];
     return ret;

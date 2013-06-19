@@ -77,10 +77,10 @@
   	left: 25px;
   }
   
-  .has-count img.right-icon {
-    right: 32px;
-  }
-  &.has-count{
+  &.has-count {
+    img.right-icon {
+      right: 32px;
+    }
     &.two-digit img.right-icon {
       right: 38px;
     }
@@ -129,6 +129,7 @@
   	font-weight: bold;
   	border: 1px #888 solid;
   	letter-spacing: -1px;
+    border-radius: 7px;
   	-webkit-border-radius: 7px;
   	-moz-border-radius: 7px;
   }

@@ -20,7 +20,7 @@ test("calls createChildView() for each class or string in childViews array", fun
       'customClassName'           // string - should be called
     ],
 
-    // this shuld be used for the 'customClassName' item above
+    // this should be used for the 'customClassName' item above
     customClassName: SC.View.extend({ key: 2 }),
 
     // patch to record results...
@@ -49,10 +49,12 @@ test("should not error when there is a dud view name in childViews list.", funct
   var called = [];
   var v = SC.View.create({
     childViews: [
-      "nonExistantClassNme",       // string - should NOT be called
-        'customClassName'          // string - should be called
+      'nonExistantClassName',       // string - should NOT be called
+      null,                       // null - should NOT be called
+      '',                         // empty string - should NOT be called
+      'customClassName'          // string - should be called
     ],
-    // this shuld be used for the 'customClassName' item above
+    // this should be used for the 'customClassName' item above
     customClassName: SC.View.extend({ key: 2 }),
 
     // patch to record results...
@@ -65,13 +67,14 @@ test("should not error when there is a dud view name in childViews list.", funct
 
   // createChildViews() is called automatically during create.
   same(called, [2], 'called createChildView for correct children');
+  equals(v.getPath('childViews.length'), 1, "The childViews array should not contain any invalid childViews after creation.");
 });
 
 test("should not throw error when there is an extra space in the childViews list", function() {
   var called = [];
   var v = SC.View.create({
     childViews: "customClassName  customKlassName".w(),
-    // this shuld be used for the 'customClassName' item above
+    // this should be used for the 'customClassName' item above
     customClassName: SC.View.extend({ key: 2 }),
     customKlassName: SC.View.extend({ key: 3 })
   });
@@ -121,12 +124,13 @@ test("should set newView.page to receiver.page unless custom attr is passed", fu
   equals(v.get('page'), myPage, 'v.page == custom page');
 });
 
-test("should not change isVisibleInWindow property on views that do not have visibility support", function() {
-  var coreView = SC.CoreView.extend({});
+// CoreView has basic visibility support based on state now.
+// test("should not change isVisibleInWindow property on views that do not have visibility support", function() {
+//   var coreView = SC.CoreView.extend({});
 
-  SC.run(function() { view.set('isVisible', NO); });
-  var v = view.createChildView(coreView);
+//   SC.run(function() { view.set('isVisible', NO); });
+//   var v = view.createChildView(coreView);
 
-  ok(v.get('isVisibleInWindow'), "SC.CoreView instance always has isVisibleInWindow set to NO");
-});
+//   ok(v.get('isVisibleInWindow'), "SC.CoreView instance always has isVisibleInWindow set to NO");
+// });
 

@@ -150,7 +150,7 @@ SC.RecordAttribute = SC.Object.extend(
     Note that you will have to take care of destroying the created record
     once all relationships are removed from it.
 
-    @property {Boolean}
+    @type Boolean
     @default NO
    */
   lazilyInstantiate: NO,
@@ -305,18 +305,25 @@ SC.RecordAttribute = SC.Object.extend(
       record.writeAttribute(attrKey, nvalue);
     }
 
-    nvalue = value = record.readAttribute(attrKey);
+    value = record.readAttribute(attrKey);
     if (SC.none(value) && (value = this.get('defaultValue'))) {
        if (typeof value === SC.T_FUNCTION) {
-        value = this.defaultValue(record, key, this);
-        // write default value so it doesn't have to be executed again
-        if ((nvalue !== value)  &&  record.get('store').readDataHash(record.get('storeKey'))) {
-          record.writeAttribute(attrKey, value, true);
-        }
+        value = value(record, key, this);
       }
-    } else value = this.toType(record, key, value);
+    }
+
+    value = this.toType(record, key, value);
 
     return value ;
+  },
+
+  /**
+    Apply needs to implemented for sc_super to work.
+
+    @see SC.RecordAttribute#call
+  */
+  apply: function(target, args) {
+    return this.call.apply(target, args);
   },
 
   // ..........................................................
@@ -377,7 +384,7 @@ SC.RecordAttribute.mixin(
      - `to(value, attr, klass, record, key)` converts the passed value
        (which will be of the class expected by the attribute) into the
        underlying attribute value
-     - `from(value, attr, klass, record, key)` converts the underyling
+     - `from(value, attr, klass, record, key)` converts the underlying
        attribute value into a value of the class
 
     You can also provide an array of keys to observer on the return value.
@@ -592,6 +599,11 @@ if (SC.DateTime && !SC.RecordAttribute.transforms[SC.guidFor(SC.DateTime)]) {
       Convert a String to a DateTime
     */
     to: function(str, attr) {
+      if(attr.get('useUnixTime')) {
+        if(SC.typeOf(str) === SC.T_STRING) { str = parseInt(str); }
+        if(isNaN(str) || SC.typeOf(str) !== SC.T_NUMBER) { str = 0; }
+        return SC.DateTime.create({ milliseconds: str*1000, timezone: 0 });
+      }
       if (SC.none(str) || SC.instanceOf(str, SC.DateTime)) return str;
       if (SC.none(str) || SC.instanceOf(str, Date)) return SC.DateTime.create(str.getTime());
       var format = attr.get('format');
@@ -603,6 +615,9 @@ if (SC.DateTime && !SC.RecordAttribute.transforms[SC.guidFor(SC.DateTime)]) {
     */
     from: function(dt, attr) {
       if (SC.none(dt)) return dt;
+      if (attr.get('useUnixTime')) {
+        return dt.get('milliseconds')/1000;
+      }
       var format = attr.get('format');
       return dt.toFormattedString(format ? format : SC.DateTime.recordFormat);
     }

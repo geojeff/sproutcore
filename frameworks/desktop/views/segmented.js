@@ -36,7 +36,7 @@ sc_require('views/segment');
     - *itemIconKey*  - an icon
     - *itemActionKey* - an optional action to fire when pressed
     - *itemTargetKey* - an optional target for the action
-    - *itemLayerIdKey* - an optional target for the action 
+    - *itemLayerIdKey* - an optional target for the action
     - *segmentViewClass* - class to be used for creating segments
 
   @extends SC.View
@@ -61,7 +61,8 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     @default 'tablist'
     @readOnly
   */
-  ariaRole: 'tablist',
+  //ariaRole: 'tablist',
+  ariaRole: 'group', // workaround for <rdar://problem/10444670>; switch back to 'tablist' later with <rdar://problem/10463928> (also see segment.js)
 
   /**
     @type Array
@@ -99,7 +100,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
   /**
     If YES, clicking a selected button again will deselect it, setting the
     segmented views value to null.
-    
+
     @type Boolean
     @default NO
   */
@@ -108,7 +109,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
   /**
     If YES, then clicking on a tab will not deselect the other segments, it
     will simply add or remove it from the selection.
-    
+
     @type Boolean
     @default NO
   */
@@ -131,11 +132,11 @@ SC.SegmentedView = SC.View.extend(SC.Control,
   /**
     Aligns the segments of the segmented view within its frame horizontally.
     Possible values:
-    
+
       - SC.ALIGN_LEFT
       - SC.ALIGN_RIGHT
       - SC.ALIGN_CENTER
-    
+
     @type String
     @default SC.ALIGN_CENTER
   */
@@ -144,10 +145,10 @@ SC.SegmentedView = SC.View.extend(SC.Control,
   /**
     Change the layout direction to make this a vertical set of tabs instead
     of horizontal ones. Possible values:
-    
+
       - SC.LAYOUT_HORIZONTAL
       - SC.LAYOUT_VERTICAL
-    
+
     @type String
     @default SC.LAYOUT_HORIZONTAL
   */
@@ -238,7 +239,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
 
   /**
     The key that contains the layerId for each item.
-    @property {String}
+    @type String
   */
   itemLayerIdKey: null,
 
@@ -252,6 +253,15 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     @default null
   */
   itemKeyEquivalentKey: null,
+
+  /**
+    If YES, overflowing items are placed into a menu and an overflow segment is
+    added to popup that menu.
+
+    @type Boolean
+    @default YES
+  */
+  shouldHandleOverflow: YES,
 
   /**
     The title to use for the overflow segment if it appears.
@@ -295,7 +305,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     @type Array
   */
   itemKeys: ['itemTitleKey', 'itemValueKey', 'itemIsEnabledKey', 'itemIconKey', 'itemWidthKey', 'itemToolTipKey', 'itemKeyEquivalentKey', 'itemLayerIdKey'],
-  
+
   /** @private */
   viewKeys: ['title', 'value', 'isEnabled', 'icon', 'width', 'toolTip', 'keyEquivalent', 'layerId'],
 
@@ -318,14 +328,32 @@ SC.SegmentedView = SC.View.extend(SC.Control,
       toolTip: toolTip,
       icon: icon,
       isLastSegment: YES,
+<<<<<<< HEAD
       isOverflowSegment: YES,
       layoutDirection: this.get('layoutDirection')
+||||||| merged common ancestors
+      isOverflowSegment: YES
+=======
+      isOverflowSegment: YES,
+      layoutDirection: this.get('layoutDirection'),
+      isVisible: this.get('shouldHandleOverflow')
+>>>>>>> upstream/master
     });
+    this.set('overflowView', overflowView);
 
     this.appendChild(overflowView);
 
     this.itemsDidChange();
   },
+
+  shouldHandleOverflowDidChange: function() {
+    if (this.get('shouldHandleOverflow')) {
+      // remeasure should show/hide it as needed
+      this.invokeLast(this.remeasure);
+    } else {
+      this.get('overflowView').set('isVisible', NO);
+    }
+  }.observes('shouldHandleOverflow'),
 
   /** @private
     Called whenever the number of items changes.  This method populates SegmentedView's childViews, taking
@@ -335,6 +363,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     var items = this.get('items') || [],
         item,
         localItem,                        // Used to avoid altering the original items
+        previousItem,
         childViews = this.get('childViews'),
         childView,
         overflowView = childViews.lastObject(),
@@ -353,15 +382,28 @@ SC.SegmentedView = SC.View.extend(SC.Control,
       // Remove unneeded segments from the end back
       for (i = childViews.get('length') - 2; i >= items.get('length'); i--) {
         childView = childViews.objectAt(i);
+        localItem = childView.get('localItem');
+
+        // Remove observers from items we are losing off the end
+        if (localItem instanceof SC.Object) {
+
+          for (j = itemKeys.get('length') - 1; j >= 0; j--) {
+            itemKey = this.get(itemKeys.objectAt(j));
+
+            if (itemKey) {
+              localItem.removeObserver(itemKey, this, this.itemContentDidChange);
+            }
+          }
+        }
 
         // If a selected childView has been removed then update our value
         if (SC.isArray(value)) {
-          value.removeObject(childView.get('value'));
-        } else if (value === childView.get('value')) {
+          value.removeObject(localItem);
+        } else if (value === localItem) {
           value = null;
         }
 
-        this.removeChild(childView);
+        this.removeChildAndDestroy(childView);
       }
 
       // Update our value which may have changed
@@ -392,6 +434,18 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     for (i = 0; i < items.get('length'); i++) {
       localItem = items.objectAt(i);
       childView = childViews.objectAt(i);
+      previousItem = childView.get('localItem');
+
+      if (previousItem instanceof SC.Object && !items.contains(previousItem)) {
+        // If the old item is no longer in the view, remove its observers
+        for (j = itemKeys.get('length') - 1; j >= 0; j--) {
+          itemKey = this.get(itemKeys.objectAt(j));
+
+          if (itemKey) {
+            previousItem.removeObserver(itemKey, this, this.itemContentDidChange);
+          }
+        }
+      }
 
       // Skip null/undefined items (but don't skip empty strings)
       if (SC.none(localItem)) continue;
@@ -443,7 +497,9 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     }
 
     // Force a segment remeasure to check overflow
-    this.invokeLast(this.remeasure);
+    if (this.get('shouldHandleOverflow')) {
+      this.invokeLast(this.remeasure);
+    }
   }.observes('*items.[]'),
 
   /** @private
@@ -464,26 +520,53 @@ SC.SegmentedView = SC.View.extend(SC.Control,
       SC.Logger.warn("Item content change was observed on item without matching segment child view.");
     }
 
+<<<<<<< HEAD
     // Reset our measurements (which depend on width/height or title) and adjust visible views
     this.invokeLast(this.remeasure);
+||||||| merged common ancestors
+    // Reset our measurements (which depend on width or title) and adjust visible views
+    this.invokeLast(this.remeasure);
+=======
+    // Reset our measurements (which depend on width/height or title) and adjust visible views
+    if (this.get('shouldHandleOverflow')) {
+      this.invokeLast(this.remeasure);
+    }
+>>>>>>> upstream/master
   },
 
   /** @private
     Whenever the view resizes, we need to check to see if we're overflowing.
   */
   viewDidResize: function() {
+<<<<<<< HEAD
     var isHorizontal = this.get('layoutDirection') === SC.LAYOUT_HORIZONTAL,
         visibleDim = isHorizontal ? this.$().width() : this.$().height();
      
     // Only overflow if we've gone below the minimum dimension required to fit all the segments
     if (this.isOverflowing || visibleDim <= this.cachedMinimumDim) this.adjustOverflow();
+||||||| merged common ancestors
+    var visibleWidth = this.$().width();
+
+    // Only overflow if we've gone below the minimum width required to fit all the segments
+    if (this.isOverflowing || visibleWidth <= this.cachedMinimumWidth) this.adjustOverflow();
+=======
+    var isHorizontal = this.get('layoutDirection') === SC.LAYOUT_HORIZONTAL,
+        visibleDim = isHorizontal ? this.$().width() : this.$().height();
+
+    // Only overflow if we've gone below the minimum dimension required to fit all the segments
+    if (this.get('shouldHandleOverflow') && (this.isOverflowing || visibleDim <= this.cachedMinimumDim)) {
+	  this.adjustOverflow();
+    }
+>>>>>>> upstream/master
   },
 
   /** @private
     Whenever visibility changes, we need to check to see if we're overflowing.
   */
   isVisibleInWindowDidChange: function() {
-    this.invokeLast(this.remeasure);
+    if (this.get('shouldHandleOverflow')) {
+      this.invokeLast(this.remeasure);
+    }
   }.observes('isVisibleInWindow'),
 
   /** @private
@@ -491,6 +574,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     segments for overflow if necessary.
   */
   remeasure: function() {
+    if (!this.get('shouldHandleOverflow')) { return; }
     var renderDelegate = this.get('renderDelegate'),
         childViews = this.get('childViews'),
         overflowView;
@@ -516,6 +600,8 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     This method is called to adjust the segment views to see if we need to handle for overflow.
    */
   adjustOverflow: function() {
+    if (!this.get('shouldHandleOverflow')) { return; }
+
     var childViews = this.get('childViews'),
         childView,
         value = this.get('value'),
@@ -569,6 +655,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     if (this.isOverflowing) overflowView.set('isVisible', YES);
     else overflowView.set('isVisible', NO);
 
+<<<<<<< HEAD
     // Store the minimum dimension (height/width) before overflow
     this.cachedMinimumDim = curElementsDim + this.cachedOverflowDim;
   },
@@ -610,6 +697,81 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     }
 
     return 0;
+||||||| merged common ancestors
+    // Store the minimum width before overflow
+    this.cachedMinimumWidth = curElementsWidth + this.cachedOverflowWidth;
+=======
+    // Store the minimum dimension (height/width) before overflow
+    this.cachedMinimumDim = curElementsDim + this.cachedOverflowDim;
+  },
+
+  /**
+    Return the dimensions (either heights or widths depending on the layout direction) of the DOM
+    elements of the segments.  This will be measured by the view to determine which segments should
+    be overflowed.
+
+    It ignores the last segment (the overflow segment).
+  */
+  segmentDimensions: function() {
+    var cv = this.get('childViews'),
+        v, f,
+        dims = [],
+        isHorizontal = this.get('layoutDirection') === SC.LAYOUT_HORIZONTAL;
+
+    for (var i = 0, length = cv.length; i < length - 1; i++) {
+      v = cv[i];
+      f = v.get('frame');
+      dims[i] = isHorizontal ? f.width : f.height;
+    }
+
+    return dims;
+  },
+
+  /**
+    Return the dimension (height or width depending on the layout direction) over the overflow segment.
+  */
+  overflowSegmentDim: function() {
+    var cv = this.get('childViews'),
+        v, f,
+        isHorizontal = this.get('layoutDirection') === SC.LAYOUT_HORIZONTAL;
+
+    v = cv.length && cv[cv.length - 1];
+    if (v) {
+      f = v.get('frame');
+      return isHorizontal ? f.width : f.height;
+    }
+
+    return 0;
+  },
+
+  /**
+    Return the index of the segment view that is the target of the mouse click.
+  */
+  indexForClientPosition: function(x, y) {
+    var cv = this.get('childViews'),
+        length, i,
+        v, rect,
+        point;
+
+    point = {x: x, y: y};
+    for (i = 0, length = cv.length; i < length; i++) {
+      v = cv[i];
+
+      rect = v.get('layer').getBoundingClientRect();
+      rect = {
+        x: rect.left,
+        y: rect.top,
+        width: (rect.right-rect.left),
+        height: (rect.bottom - rect.top)
+      };
+
+      // Return the index early if found
+      if (SC.pointInRect(point, rect)) return i;
+    }
+
+    // Default not found
+    return -1;
+>>>>>>> upstream/master
   },
 
   /**
@@ -667,7 +829,35 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     event occurred.
   */
   displayItemIndexForEvent: function(evt) {
+<<<<<<< HEAD
     return this.indexForClientPosition(evt.clientX, evt.clientY);
+||||||| merged common ancestors
+    var renderDelegate = this.get('renderDelegate');
+
+    if (renderDelegate && renderDelegate.indexForClientPosition) {
+      return renderDelegate.indexForClientPosition(this, evt.clientX, evt.clientY);
+    }
+=======
+    var renderDelegate = this.get('renderDelegate');
+    var x = evt.clientX;
+    var y = evt.clientY;
+
+    // Accessibility workaround: <rdar://problem/10467360> WebKit sends all event coords as 0,0 for all AXPress-triggered events
+    if (x === 0 && y === 0) {
+      var el = evt.target;
+      if (el) {
+        var offset = SC.offset(el);
+        x = offset.x + Math.round(el.offsetWidth/2);
+        y = offset.y + Math.round(el.offsetHeight/2);
+      }
+    }
+
+    if (renderDelegate && renderDelegate.indexForClientPosition) {
+      return renderDelegate.indexForClientPosition(this, x, y);
+    }
+
+    return this.indexForClientPosition(evt.clientX, evt.clientY);
+>>>>>>> upstream/master
   },
 
   /** @private */
@@ -739,10 +929,9 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     if (!this.get('isEnabled')) return YES; // nothing to do
 
     index = this.displayItemIndexForEvent(evt);
-
     if (index >= 0) {
       childView = childViews.objectAt(index);
-      childView.set('isActive', YES);
+      if (childView.get('isEnabled')) childView.set('isActive', YES);
       this.activeChildView = childView;
 
       // if mouse was pressed on the overflow segment, popup the menu
@@ -759,19 +948,19 @@ SC.SegmentedView = SC.View.extend(SC.Control,
         index;
 
     index = this.displayItemIndexForEvent(evt);
-
     if (this._isMouseDown && (index >= 0)) {
 
       this.triggerItemAtIndex(index);
 
       // Clean up
       activeChildView = this.activeChildView;
-      activeChildView.set('isActive', NO);
-      this.activeChildView = null;
-
-      this._isMouseDown = NO;
+      if (activeChildView) {
+        activeChildView.set('isActive', NO);
+        this.activeChildView = null;
+      }
     }
 
+    this._isMouseDown = NO;
     return YES;
   },
 
@@ -793,8 +982,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
       if (childView && childView !== activeChildView) {
         // Changed
         if (activeChildView) activeChildView.set('isActive', NO);
-        childView.set('isActive', YES);
-
+        if (childView.get('isEnabled')) childView.set('isActive', YES);
         this.activeChildView = childView;
 
         if (index === overflowIndex) {
@@ -823,7 +1011,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
         this._isMouseDown = NO;
       } else if (index >= 0) {
         childView = childViews.objectAt(index);
-        childView.set('isActive', YES);
+        if (childView.get('isEnabled')) childView.set('isActive', YES);
 
         this.activeChildView = childView;
       }
@@ -1035,7 +1223,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
       if (targetKey) {
         target = item.get ? item.get(targetKey) : item[targetKey];
       }
-      if (resp) resp.sendAction(action, target, this, this.get('pane'));
+      if (resp) resp.sendAction(action, target, this, this.get('pane'),value);
     }
 
     if(val !== undefined && (!action || this.get('selectSegmentWhenTriggeringAction'))) {
@@ -1045,7 +1233,7 @@ SC.SegmentedView = SC.View.extend(SC.Control,
     // if an action/target is defined on self use that also
     action =this.get('action');
     if (action && resp) {
-      resp.sendAction(action, this.get('target'), this, this.get('pane'));
+      resp.sendAction(action, this.get('target'), this, this.get('pane'),value);
     }
   },
 

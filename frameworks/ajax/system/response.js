@@ -24,14 +24,14 @@ SC.Response = SC.Object.extend(
 
   /**
     Walk like a duck
-    
+
     @type Boolean
   */
   isResponse: YES,
-  
+
   /**
     Becomes true if there was a failure.  Makes this into an error object.
-    
+
     @type Boolean
     @default NO
   */
@@ -67,7 +67,7 @@ SC.Response = SC.Object.extend(
     @default null
   */
   request: null,
-  
+
   /**
     The request object that originated this request series.  Mostly this is
     useful if you are looking for a reference to the original request.  To
@@ -80,10 +80,10 @@ SC.Response = SC.Object.extend(
   originalRequest: function() {
     var ret = this.get('request');
     while (ret.get('source')) { ret = ret.get('source'); }
-    return ret ;
+    return ret;
   }.property('request').cacheable(),
 
-  /** 
+  /**
     Type of request. Must be an HTTP method. Based on the request.
 
     @field
@@ -106,7 +106,7 @@ SC.Response = SC.Object.extend(
   }.property('request').cacheable(),
 
   /**
-    If set then will attempt to automatically parse response as JSON 
+    If set then will attempt to automatically parse response as JSON
     regardless of headers.
 
     @field
@@ -120,7 +120,7 @@ SC.Response = SC.Object.extend(
 
   /**
     If set, then will attempt to automatically parse response as XML
-    regarldess of headers.
+    regardless of headers.
 
     @field
     @type Boolean
@@ -128,7 +128,7 @@ SC.Response = SC.Object.extend(
     @observes request
   */
   isXML: function() {
-    return this.getPath('request.isXML') || NO ;
+    return this.getPath('request.isXML') || NO;
   }.property('request').cacheable(),
 
   /**
@@ -212,7 +212,7 @@ SC.Response = SC.Object.extend(
     @default null
   */
   timedOut: null,
-  
+
   /**
     The timer tracking the timeout
 
@@ -224,7 +224,7 @@ SC.Response = SC.Object.extend(
 
   // ..........................................................
   // METHODS
-  // 
+  //
 
   /**
     Called by the request manager when its time to actually run. This will
@@ -241,7 +241,7 @@ SC.Response = SC.Object.extend(
     req.freeze();
 
     // if the source did not cancel the request, then invoke the transport
-    // to actually trigger the request.  This might receive a response 
+    // to actually trigger the request.  This might receive a response
     // immediately if it is synchronous.
     if (!this.get('isCancelled')) { this.invokeTransport(); }
 
@@ -324,9 +324,9 @@ SC.Response = SC.Object.extend(
   */
   cancel: function() {
     if (!this.get('isCancelled')) {
-      this.set('isCancelled', YES) ;
-      this.cancelTransport() ;
-      SC.Request.manager.transportDidClose(this) ;
+      this.set('isCancelled', YES);
+      this.cancelTransport();
+      SC.Request.manager.transportDidClose(this);
     }
   },
 
@@ -349,8 +349,8 @@ SC.Response = SC.Object.extend(
         if (!proceed) { return; }
 
         // Set our value to an error.
-        var error = SC.$error("HTTP Request timed out", "Request", 0) ;
-        error.set("errorValue", this) ;
+        var error = SC.$error("HTTP Request timed out", "Request", 0);
+        error.set("errorValue", this);
         this.set('isError', YES);
         this.set('errorObject', error);
         this.set('status', 0);
@@ -373,7 +373,7 @@ SC.Response = SC.Object.extend(
     Will notify each listener. Returns true if any of the listeners handle.
   */
   _notifyListeners: function(listeners, status) {
-    var notifiers = listeners[status], params, target, action;
+    var notifiers = listeners[status], args, target, action;
     if (!notifiers) { return NO; }
 
     var handled = NO;
@@ -381,14 +381,14 @@ SC.Response = SC.Object.extend(
 
     for (var i = 0; i < len; i++) {
       var notifier = notifiers[i];
-      params = (notifier.params || []).copy();
-      params.unshift(this);
+      args = (notifier.args || []).copy();
+      args.unshift(this);
 
       target = notifier.target;
       action = notifier.action;
       if (SC.typeOf(action) === SC.T_STRING) { action = target[action]; }
 
-      handled = action.apply(target, params);
+      handled = action.apply(target, args);
     }
 
     return handled;
@@ -410,10 +410,10 @@ SC.Response = SC.Object.extend(
     handled = this._notifyListeners(listeners, status);
     if (!handled && baseStat !== status) { handled = this._notifyListeners(listeners, baseStat); }
     if (!handled && status !== 0) { handled = this._notifyListeners(listeners, 0); }
-    
-    return this ;
+
+    return this;
   },
-  
+
   /**
     String representation of the response object
 
@@ -498,24 +498,60 @@ SC.XHRResponse = SC.Response.extend(
     this.set('rawRequest', null);
   },
 
+
   /**
     Starts the transport of the request
 
     @returns {XMLHttpRequest|ActiveXObject}
   */
   invokeTransport: function() {
-    var rawRequest, transport, handleReadyStateChange, async, headers;
+    var listener, listeners, listenersForKey,
+      rawRequest,
+      request = this.get('request'),
+      transport, handleReadyStateChange, async, headers;
 
     rawRequest = this.createRequest();
     this.set('rawRequest', rawRequest);
 
     // configure async callback - differs per browser...
-    async = !!this.getPath('request.isAsynchronous');
+    async = !!request.get('isAsynchronous');
 
     if (async) {
-      if (!SC.browser.msie && !SC.browser.opera) {
-        SC.Event.add(rawRequest, 'readystatechange', this,
-                     this.finishRequest, rawRequest);
+      if (window.XMLHttpRequestProgressEvent) {
+        // XMLHttpRequest Level 2
+
+        // Add progress event listeners that were specified on the request.
+        listeners = request.get("listeners");
+        if (listeners) {
+          for (var key in listeners) {
+
+            // Make sure the key is not an HTTP numeric status code.
+            if (isNaN(parseInt(key, 10))) {
+              // We still allow multiple notifiers on progress events, but we
+              // don't try to optimize this by using a single listener, because
+              // it is highly unlikely that the developer will add duplicate
+              // progress event notifiers and if they did, it is also unlikely
+              // that they would expect them to cascade in the way that the
+              // status code notifiers do.
+              listenersForKey = listeners[key];
+              for (var i = 0, len = listenersForKey.length; i < len; i++) {
+                listener = listenersForKey[i];
+
+                var keyTarget = key.split('.');
+                if (SC.none(keyTarget[1])) {
+                  SC.Event.add(rawRequest, keyTarget[0], listener.target, listener.action, listener.args);
+                } else {
+                  SC.Event.add(rawRequest[keyTarget[0]], keyTarget[1], listener.target, listener.action, listener.args);
+                }
+              }
+            }
+          }
+        }
+
+        SC.Event.add(rawRequest, 'loadend', this, this.finishRequest);
+      } else if (window.XMLHttpRequest && rawRequest.addEventListener) {
+        // XMLHttpRequest Level 1 + support for addEventListener (IE prior to version 9.0 lacks support for addEventListener)
+        SC.Event.add(rawRequest, 'readystatechange', this, this.finishRequest);
       } else {
         transport = this;
         handleReadyStateChange = function() {
@@ -534,12 +570,12 @@ SC.XHRResponse = SC.Response.extend(
     // headers need to be set *after* the open call.
     headers = this.getPath('request.headers');
     for (var headerKey in headers) {
-      rawRequest.setRequestHeader(headerKey, headers[headerKey]) ;
+      rawRequest.setRequestHeader(headerKey, headers[headerKey]);
     }
 
     // now send the actual request body - for sync requests browser will
     // block here
-    rawRequest.send(this.getPath('request.encodedBody')) ;
+    rawRequest.send(this.getPath('request.encodedBody'));
     if (!async) { this.finishRequest(); }
 
     return rawRequest;
@@ -554,21 +590,22 @@ SC.XHRResponse = SC.Response.extend(
     @returns {XMLHttpRequest|ActiveXObject}
   */
   createRequest: function() {
-    function tryThese() {
-      for (var i=0; i < arguments.length; i++) {
-        try {
-          var item = arguments[i]();
-          return item;
-        } catch (e) {}
-      }
-      return NO;
+    var rawRequest;
+
+    // check native support first
+    if (window.XMLHttpRequest) {
+      rawRequest = new XMLHttpRequest();
+    } else {
+      // There are two relevant Microsoft MSXML object types.
+      // See here for more information:
+      // http://www.snook.ca/archives/javascript/xmlhttprequest_activex_ie/
+      // http://blogs.msdn.com/b/xmlteam/archive/2006/10/23/using-the-right-version-of-msxml-in-internet-explorer.aspx
+      // http://msdn.microsoft.com/en-us/library/windows/desktop/ms763742(v=vs.85).aspx
+      try { rawRequest = new ActiveXObject("MSXML2.XMLHTTP.6.0");  } catch(e) {}
+      try { if (!rawRequest) rawRequest = new ActiveXObject("MSXML2.XMLHTTP");  } catch(e) {}
     }
 
-    return tryThese(
-      function() { return new XMLHttpRequest(); },
-      function() { return new ActiveXObject('Msxml2.XMLHTTP'); },
-      function() { return new ActiveXObject('Microsoft.XMLHTTP'); }
-    );
+    return rawRequest;
   },
 
   /**
@@ -580,9 +617,11 @@ SC.XHRResponse = SC.Response.extend(
     @returns {Boolean} YES if completed, NO otherwise
   */
   finishRequest: function(evt) {
-    var rawRequest = this.get('rawRequest'),
-        readyState = rawRequest.readyState,
-        error, status, msg;
+    var listener, listeners, listenersForKey,
+      rawRequest = this.get('rawRequest'),
+      readyState = rawRequest.readyState,
+      request,
+      error, status, msg;
 
     if (readyState === 4 && !this.get('timedOut')) {
       this.receive(function(proceed) {
@@ -604,17 +643,44 @@ SC.XHRResponse = SC.Response.extend(
           }
 
           error = SC.$error(msg || "HTTP Request failed", "Request", status);
-          error.set("errorValue", this) ;
+          error.set("errorValue", this);
           this.set('isError', YES);
           this.set('errorObject', error);
         }
 
-        // set the status - this will trigger changes on relatedp properties
+        // set the status - this will trigger changes on related properties
         this.set('status', status);
       }, this);
 
       // Avoid memory leaks
-      if (!SC.browser.msie && !SC.browser.opera) {
+      if (window.XMLHttpRequestProgressEvent) {
+        // XMLHttpRequest Level 2
+
+        SC.Event.remove(rawRequest, 'loadend', this, this.finishRequest);
+
+        request = this.get('request');
+        listeners = request.get("listeners");
+        if (listeners) {
+          for (var key in listeners) {
+
+            // Make sure the key is not an HTTP numeric status code.
+            if (isNaN(parseInt(key, 10))) {
+              listenersForKey = listeners[key];
+              for (var i = 0, len = listenersForKey.length; i < len; i++) {
+                listener = listenersForKey[i];
+
+                var keyTarget = key.split('.');
+                if (SC.none(keyTarget[1])) {
+                  SC.Event.remove(rawRequest, keyTarget[0], listener.target, listener.action, listener.args);
+                } else {
+                  SC.Event.remove(rawRequest[keyTarget[0]], keyTarget[1], listener.target, listener.action, listener.args);
+                }
+              }
+            }
+          }
+        }
+      } else if (window.XMLHttpRequest && rawRequest.addEventListener) {
+        // XMLHttpRequest Level 1 + support for addEventListener (IE prior to version 9.0 lacks support for addEventListener)
         SC.Event.remove(rawRequest, 'readystatechange', this, this.finishRequest);
       } else {
         rawRequest.onreadystatechange = null;

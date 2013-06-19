@@ -35,7 +35,7 @@ sc_require('system/drag');
   once during every drag session. computeDragOperations, if called at all, may be 
   called more than once before the dragEntered method is called. Once dragEntered 
   is called, you are at guaranteed that both dragUpdated and dragExited will be 
-  called at some point, followed by either dragEnded or additonal 
+  called at some point, followed by either dragEnded or additional 
   computeDragOperation calls.
 */
 SC.DropTarget = {
@@ -137,11 +137,12 @@ SC.DropTarget = {
     @param {SC.Drag} drag The current drag object
     @param {SC.Event} evt The most recent mouse move event.  Use to get 
       location 
+    @param {DragOp} op The proposed drag operation. A drag constant
     
     @returns {DragOps} A mask of all the drag operations allowed or 
       SC.DRAG_NONE
   */
-  computeDragOperations: function(drag, evt) {
+  computeDragOperations: function(drag, evt, op) {
     return SC.DRAG_NONE;
   },
   
@@ -167,7 +168,7 @@ SC.DropTarget = {
   /**
     Called to actually perform the drag operation.
     
-    Overide this method to actually perform the drag operation.  This method
+    Override this method to actually perform the drag operation.  This method
     is only called if you returned `YES` in `acceptDragOperation()`. 
     
     Return the operation that was actually performed or `SC.DRAG_NONE` if the 

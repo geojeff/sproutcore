@@ -129,7 +129,7 @@ SC.mixin(SC.String, {
     // NB: This could be implemented as a wrapper to locWithDefault() but
     // it would add some overhead to deal with the arguments and adds stack
     // frames, so we are keeping the implementation separate.
-    if(!SC.Locale.currentLocale) { SC.Locale.createCurrentLocale(); }
+    if (!SC.Locale.currentLocale) { SC.Locale.createCurrentLocale(); }
 
     var localized = SC.Locale.currentLocale.locWithDefault(str);
     if (SC.typeOf(localized) !== SC.T_STRING) { localized = str; }
@@ -137,9 +137,23 @@ SC.mixin(SC.String, {
     var args = SC.$A(arguments);
     args.shift(); // remove str param
     //to extend String.prototype
-    if(args.length>0 && args[0].isSCArray) args=args[0];
+    if (args.length > 0 && args[0] && args[0].isSCArray) { args = args[0]; }
 
-    return SC.String.fmt(localized, args);
+    // I looked up the performance of try/catch. IE and FF do not care so
+    // long as the catch never happens. Safari and Chrome are affected rather
+    // severely (10x), but this is a one-time cost per loc (the code being
+    // executed is likely as expensive as this try/catch cost).
+    //
+    // Also, .loc() is not called SO much to begin with. So, the error handling
+    // that this gives us is worth it.
+    try {
+      return SC.String.fmt(localized, args);      
+    } catch (e) {
+      SC.error("Error processing string with key: " + str);
+      SC.error("Localized String: " + localized);
+      SC.error("Error: " + e);
+    }
+
   },
 
   /**
@@ -280,7 +294,27 @@ SC.mixin(SC.String, {
   */
   trimRight: function (str) {
     return str.replace(SC.STRING_TRIM_RIGHT_REGEXP,"");
+  },
+  
+  /**
+    Mulitplies a given string. For instance if you have a string "xyz"
+    and multiply it by 2 the result is "xyzxyz".
+    
+    @param {String} str the string to multiply
+    @param {Number} value the number of times to multiply the string
+    @returns {String} the mulitiplied string
+  */
+  mult: function(str, value) {
+    if (SC.typeOf(value) !== SC.T_NUMBER || value < 1) return null;
+    
+    var ret = "";
+    for (var i = 0; i < value; i += 1) {
+      ret += str;
+    }
+    
+    return ret;
   }
+  
 });
 
 

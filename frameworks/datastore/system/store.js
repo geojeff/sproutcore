@@ -487,7 +487,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
   dataHashDidChange: function(storeKeys, rev, statusOnly, key) {
 
     // update the revision for storeKey.  Use generateStoreKey() because that
-    // gaurantees a universally (to this store hierarchy anyway) unique
+    // guarantees a universally (to this store hierarchy anyway) unique
     // key value.
     if (!rev) rev = SC.Store.generateStoreKey();
     var isArray, len, idx, storeKey;
@@ -673,12 +673,22 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
       }
     }
 
+    // Also reset all pre-created recordArrays.
+    var ra, raList = this.get('recordArrays');
+    if (raList) {
+      while (ra = raList.pop()) {
+        ra.destroy();
+      }
+      raList.clear();
+      this.set('recordArrays', null);
+    }
+
     this.set('hasChanges', NO);
   },
 
   /** @private
     Called by a nested store on a parent store to commit any changes from the
-    store.  This will copy any changed dataHashes as well as any persistant
+    store.  This will copy any changed dataHashes as well as any persistent
     change logs.
 
     If the parentStore detects a conflict with the optimistic locking, it will
@@ -859,28 +869,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     }
   },
 
-  /** @private
-    DEPRECATED used find() instead.
-
-    This method will accept a record type or query and return a record array
-    matching the results.  This method was commonly used prior to SproutCore
-    1.0.  It has been deprecated in favor of a single `find()` method instead.
-
-    For compatibility, this method will continue to work in SproutCore 1.0 but
-    it will raise a warning.  It will be removed in a future version of
-    SproutCore.
-  */
-  findAll: function(recordType, conditions, params) {
-    SC.Logger.warn("SC.Store#findAll() will be removed in a future version of SproutCore.  Use SC.Store#find() instead");
-
-    if (!recordType || !recordType.isQuery) {
-      recordType = SC.Query.local(recordType, conditions, params);
-    }
-
-    return this._findQuery(recordType, YES, YES);
-  },
-
-
+  /** @private */
   _findQuery: function(query, createIfNeeded, refreshIfNew) {
 
     // lookup the local RecordArray for this query.
@@ -906,6 +895,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     return ret ;
   },
 
+  /** @private */
   _findRecord: function(recordType, id) {
 
     var storeKey ;
@@ -978,7 +968,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
   },
 
   /** @private
-    Will ask all record arrays that have been returned from `findAll`
+    Will ask all record arrays that have been returned from `find`
     with an `SC.Query` to check their arrays with the new `storeKey`s
 
     @param {SC.IndexSet} storeKeys set of storeKeys that changed
@@ -1029,6 +1019,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     return ret ;
   },
 
+  /** @private */
   _TMP_REC_ATTRS: {},
 
   /**
@@ -1075,6 +1066,29 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     You can also optionally specify an id or else it will be pulled from the
     data hash.
 
+    Example:
+
+      MyApp.Record = SC.Record.extend({
+        attrA: SC.Record.attr(String, { defaultValue: 'def' }),
+        isAttrB: SC.Record.attr(Boolean, { key: 'attr_b' }),
+        primaryKey: 'pKey'
+      });
+
+      // If you don't provide a value and have designated a defaultValue, the
+      // defaultValue will be used.
+      MyApp.store.createRecord(MyApp.Record).get('attributes');
+      > { attrA: 'def' }
+
+      // If you use a key on an attribute, you can specify the key name or the
+      // attribute name when creating the record, but if you specify both, only
+      // the key name will be used.
+      MyApp.store.createRecord(MyApp.Record, { isAttrB: YES }).get('attributes');
+      > { attr_b: YES }
+      MyApp.store.createRecord(MyApp.Record, { attr_b: YES }).get('attributes');
+      > { attr_b: YES }
+      MyApp.store.createRecord(MyApp.Record, { isAttrB: NO, attr_b: YES }).get('attributes');
+      > { attr_b: YES }
+
     Note that the record will not yet be saved back to the server.  To save
     a record to the server, call `commitChanges()` on the store.
 
@@ -1085,8 +1099,10 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     @returns {SC.Record} Returns the created record
   */
   createRecord: function(recordType, dataHash, id) {
-    var primaryKey, storeKey, status, K = SC.Record, changelog, defaultVal,
-        ret;
+    var primaryKey, prototype, storeKey, status, K = SC.Record, changelog, defaultVal, ret;
+
+    //initialize dataHash if necessary
+    dataHash = (dataHash ? dataHash : {});
 
     // First, try to get an id.  If no id is passed, look it up in the
     // dataHash.
@@ -1118,11 +1134,48 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
       throw K.BAD_STATE_ERROR;
     }
 
-    // add dataHash and setup initial status -- also save recordType
-    this.writeDataHash(storeKey, (dataHash ? dataHash : {}), K.READY_NEW);
+    // Store the dataHash and setup initial status.
+    this.writeDataHash(storeKey, dataHash, K.READY_NEW);
 
+    // Register the recordType with the store.
     SC.Store.replaceRecordTypeFor(storeKey, recordType);
     this.dataHashDidChange(storeKey);
+
+    // If the attribute wasn't provided in the dataHash, attempt to insert a
+    // default value.  We have to do this after materializing the record,
+    // because the defaultValue property may be a function that expects
+    // the record as an argument.
+    ret = this.materializeRecord(storeKey);
+    prototype = recordType.prototype;
+    for (var prop in prototype) {
+      var propPrototype = prototype[ prop ];
+      if (propPrototype && propPrototype.isRecordAttribute) {
+        // Use the record attribute key if it is defined.
+        var attrKey = propPrototype.key || prop;
+
+        if (!dataHash.hasOwnProperty(attrKey)) {
+          if (dataHash.hasOwnProperty(prop)) {
+            // If the attribute key doesn't exist but the name does, fix it up.
+            // (i.e. the developer has a record attribute `endDate` with a key
+            // `end_date` on a record and when they created the record they
+            // provided `endDate` not `end_date`)
+            dataHash[ attrKey ] = dataHash[ prop ];
+            delete dataHash[ prop ];
+          } else {
+            // If the attribute doesn't exist in the hash at all, check for a
+            // default value to use instead.
+            defaultVal = propPrototype.defaultValue;
+            if (defaultVal) {
+              if (SC.typeOf(defaultVal)===SC.T_FUNCTION) dataHash[ attrKey ] = SC.copy(defaultVal(ret, attrKey), YES);
+              else dataHash[ attrKey ] = SC.copy(defaultVal, YES);
+            }
+          }
+        } else if (attrKey !== prop && dataHash.hasOwnProperty(prop)) {
+          // If both attrKey and prop are provided, use attrKey only.
+          delete dataHash[ prop ];
+        }
+      }
+    }
 
     // Record is now in a committable state -- add storeKey to changelog
     changelog = this.changelog;
@@ -1135,9 +1188,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
       this.invokeLast(this.commitRecords);
     }
 
-    // Finally return materialized record, after we propagate the status to
-    // any aggregrate records.
-    ret = this.materializeRecord(storeKey);
+    // Propagate the status to any aggregate records before returning.
     if (ret) ret.propagateToAggregates();
     return ret;
   },
@@ -1286,9 +1337,10 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     } else if (status & K.BUSY) {
       throw K.BUSY_ERROR ;
 
-    // if new status, destroy but leave in clean state
+    // if new status, destroy in clean state
     } else if (status === K.READY_NEW) {
       status = K.DESTROYED_CLEAN ;
+      this.removeDataHash(storeKey, status) ;
 
     // otherwise, destroy in dirty state
     } else status = K.DESTROYED_DIRTY ;
@@ -1384,6 +1436,34 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
   },
 
   /**
+    Unregister the Child Record from its Parent.  This will cause the Child
+    Record to be removed from the store.
+  */
+  unregisterChildFromParent: function(childStoreKey) {
+    var crs, oldPk;
+
+    // Check the child to see if it has a parent
+    crs = this.childRecords;
+
+    // Remove the parent's connection to the child.  This doesn't remove the
+    // parent store key from the cache of parent store keys if the parent
+    // no longer has any other registered children, because the amount of effort
+    // to determine that would not be worth the miniscule memory savings.
+    oldPk = crs[childStoreKey];
+    if (oldPk) {
+      delete this.parentRecords[oldPk][childStoreKey];
+    }
+
+    // Remove the child.
+    // 1. from the cache of data hashes
+    // 2. from the cache of record objects
+    // 3. from the cache of child record store keys
+    this.removeDataHash(childStoreKey);
+    delete this.records[childStoreKey];
+    delete crs[childStoreKey];
+  },
+
+  /**
     materialize the parent when passing in a store key for the child
   */
   materializeParentRecord: function(childStoreKey){
@@ -1416,7 +1496,9 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     var children = this.parentRecords[storeKey] || {};
     if (SC.none(func)) return;
     for (var key in children) {
-      if (children.hasOwnProperty(key)) func(key);
+      // for .. in makes the key a String, but be sure to pass a Number to the
+      // function.
+      if (children.hasOwnProperty(key)) func(parseInt(key, 10));
     }
   },
 
@@ -1711,10 +1793,10 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     in the store, then this method will request a refresh from the
     `dataSource`. Otherwise it will attempt to retrieve the record.
 
-    @param {String} id to id of the record to load
     @param {SC.Record} recordType the expected record type
+    @param {String} id to id of the record to load
     @param {Number} storeKey (optional) optional store key
-    @param {Function} callback (optional) when refresh complets
+    @param {Function} callback (optional) when refresh completes
     @returns {Boolean} YES if the retrieval was a success.
   */
   refreshRecord: function(recordType, id, storeKey, callback) {
@@ -1729,7 +1811,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     @param {SC.Record|Array} recordTypes class or array of classes
     @param {Array} ids ids to destroy
     @param {Array} storeKeys (optional) store keys to destroy
-    @param {Function} callback (optional) when refresh complets
+    @param {Function} callback (optional) when refresh completes
     @returns {Boolean} YES if the retrieval was a success.
   */
   refreshRecords: function(recordTypes, ids, storeKeys, callback) {
@@ -1789,7 +1871,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
       // collect status and process
       status = this.readStatus(storeKey);
 
-      if ((status == K.EMPTY) || (status == K.ERROR)) {
+      if (status == K.ERROR) {
         throw K.NOT_FOUND_ERROR ;
       }
       else {
@@ -1811,7 +1893,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
         } else if (status==K.DESTROYED_CLEAN) {
           this.dataHashDidChange(storeKey, rev, YES);
         }
-        // ignore K.READY_CLEAN, K.BUSY_LOADING, K.BUSY_CREATING, K.BUSY_COMMITTING,
+        // ignore K.EMPTY, K.READY_CLEAN, K.BUSY_LOADING, K.BUSY_CREATING, K.BUSY_COMMITTING,
         // K.BUSY_REFRESH_CLEAN, K_BUSY_REFRESH_DIRTY, KBUSY_DESTROYING
       }
     }
@@ -1821,7 +1903,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
       ret = source.commitRecords.call(source, this, retCreate, retUpdate, retDestroy, params);
     }
 
-    //remove all commited changes from changelog
+    //remove all committed changes from changelog
     if (ret && !recordTypes && !ids) {
       if (storeKeys === this.changelog) {
         this.changelog = null;
@@ -1844,7 +1926,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     @param {SC.Record} recordType the expected record type
     @param {String} id the id of the record to commit
     @param {Number} storeKey the storeKey of the record to commit
-    @param {Hash} params optional additonal params that will passed down
+    @param {Hash} params optional additional params that will passed down
       to the data source
     @param {Function|Array} callback function or array of functions
     @returns {Boolean} if the action was successful.
@@ -2258,6 +2340,7 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
       if(dataHash===undefined) this.writeStatus(storeKey, status) ;
       else this.writeDataHash(storeKey, dataHash, status) ;
 
+      if (id && this.idFor(storeKey) !== id) SC.Store.replaceIdFor(storeKey, id);
       this.dataHashDidChange(storeKey);
 
       return storeKey;
@@ -2334,53 +2417,81 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
   // stores.  This is why these methods are implemented here instead of
   // directly on `Query` or `RecordArray` objects.
 
-  /**
-    Sets the passed array of storeKeys as the new data for the query.  You
-    can call this at any time for a remote query to update its content.  If
-    you want to use incremental loading, then pass a `SparseArray` object.
-
-    If the query you pass is not a REMOTE query, then this method will raise
-    an exception.  This will also implicitly transition the query state to
-    `SC.Record.READY`.
-
-    If you called `loadRecords()` before to load the actual content, you can
-    call this method with the return value of that method to actually set the
-    storeKeys on the result.
+  /** @deprecated
 
     @param {SC.Query} query the query you are loading.  must be remote.
     @param {SC.Array} storeKeys array of store keys
     @returns {SC.Store} receiver
   */
   loadQueryResults: function(query, storeKeys) {
+    //@if(debug)
     if (query.get('location') === SC.Query.LOCAL) {
-      throw new Error("Cannot load query results for a local query");
+      throw new Error("Developer Error: You should not call loadQueryResults with a local query.  You need to use dataSourceDidFetchQuery instead.");
+    } else {
+      SC.warn("Developer Warning: loadQueryResults has been deprecated in favor of using dataSourceDidFetchQuery for both local and remote queries.  With remote queries, include the store keys when calling dataSourceDidFetchQuery.");
     }
+    //@endif
 
-    var recArray = this._findQuery(query, YES, NO);
-    if (recArray) recArray.set('storeKeys', storeKeys);
-    this.dataSourceDidFetchQuery(query);
-
-    return this ;
+    return this.dataSourceDidFetchQuery(query, storeKeys);
   },
 
   /**
     Called by your data source whenever you finish fetching the results of a
-    query.  This will put the query into a READY state if it was loading.
+    query.  This will put the record array for the query into a READY_CLEAN
+    state if it was previously loading or refreshing.
 
-    Note that if the query is a REMOTE query, then you must separately load
-    the results into the query using `loadQueryResults()`.  If the query is
-    LOCAL, then the query will update automatically with any new records you
-    added to the store.
+    # Handling REMOTE queries
 
-    @param {SC.Query} query the query you fetched
+    Note that if the query is REMOTE, then you must first load the results
+    into the store using `loadRecords()` and pass the ordered array of store
+    keys returned by `loadRecords()` into this method.
+
+    For example,
+
+        storeKeys = store.loadRecords(body.contacts);
+        store.dataSourceDidFetchQuery(query, storeKeys);
+
+    # Automatic updates
+
+    When you call this method the record array for the query will notify that
+    its contents have changed.  If the query is LOCAL then the contents will
+    update automatically to include any new records you added to the store.
+    If the query is REMOTE the contents will update to be the ordered records
+    for the passed in store keys.
+
+    # Incremental loading for REMOTE queries
+
+    If you want to support incremental loading, then pass an SC.SparseArray
+    object to hold the store keys.  This will allow you to load results
+    incrementally and provide more store keys as you do.
+
+    See the SC.SparseArray documentation for more information.
+
+    @param {SC.Query} query The query you fetched
+    @param {Array} [storeKeys] Ordered array of store keys as returned by a remote query.  NOTE: Required for remote queries.
     @returns {SC.Store} receiver
   */
-  dataSourceDidFetchQuery: function(query) {
-    return this._scstore_dataSourceDidFetchQuery(query, YES);
+  dataSourceDidFetchQuery: function (query, storeKeys) {
+    var recArray = this._findQuery(query, YES, NO);
+
+    // Set the ordered array of store keys for remote queries.
+    if (recArray && query.get('isRemote')) {
+      //@if(debug)
+      // Prevent confusion between local and remote requests.
+      if (SC.none(storeKeys)) {
+        throw new Error("Developer Error: The storeKeys argument in dataSourceDidFetchQuery is not optional for remote queries.  For a remote query you must include the ordered array of store keys for the loaded records (even if it's an empty array).");
+      }
+      //@endif
+
+      recArray.set('storeKeys', storeKeys);
+    }
+
+    return this._scstore_dataSourceDidFetchQuery(query);
   },
 
-  _scstore_dataSourceDidFetchQuery: function(query, createIfNeeded) {
-    var recArray     = this._findQuery(query, createIfNeeded, NO),
+  /** @private */
+  _scstore_dataSourceDidFetchQuery: function (query) {
+    var recArray     = this._findQuery(query, NO, NO),
         nestedStores = this.get('nestedStores'),
         loc          = nestedStores ? nestedStores.get('length') : 0;
 
@@ -2388,11 +2499,11 @@ SC.Store = SC.Object.extend( /** @scope SC.Store.prototype */ {
     if (recArray) recArray.storeDidFetchQuery(query);
 
     // notify nested stores
-    while(--loc >= 0) {
-      nestedStores[loc]._scstore_dataSourceDidFetchQuery(query, NO);
+    while (--loc >= 0) {
+      nestedStores[loc]._scstore_dataSourceDidFetchQuery(query);
     }
 
-    return this ;
+    return this;
   },
 
   /**
@@ -2769,92 +2880,3 @@ SC.Store.mixin(/** @scope SC.Store.prototype */{
   }
 
 });
-
-
-/** @private */
-SC.Store.prototype.nextStoreIndex = 1;
-
-// ..........................................................
-// COMPATIBILITY
-//
-
-/** @private
-  global store is used only for deprecated compatibility methods.  Don't use
-  this in real code.
-*/
-SC.Store._getDefaultStore = function() {
-  var store = this._store;
-  if(!store) this._store = store = SC.Store.create();
-  return store;
-};
-
-/** @private
-
-  DEPRECATED
-
-  Included for compatibility, loads data hashes with the named `recordType`.
-  If no `recordType` is passed, expects to find a `recordType` property in the
-  data hashes.  `dataSource` and `isLoaded` params are ignored.
-
-  Calls `SC.Store#loadRecords()` on the default store. Do not use this method in
-  new code.
-
-  @param {Array} dataHashes data hashes to import
-  @param {Object} dataSource ignored
-  @param {SC.Record} recordType default record type
-  @param {Boolean} isLoaded ignored
-  @returns {Array} SC.Record instances for loaded data hashes
-*/
-SC.Store.updateRecords = function(dataHashes, dataSource, recordType, isLoaded) {
-  SC.Logger.warn("SC.Store.updateRecords() is deprecated.  Use loadRecords() instead");
-  var store = this._getDefaultStore(),
-      len   = dataHashes.length,
-      idx, ret;
-
-  // if no recordType was passed, build an array of recordTypes from hashes
-  if (!recordType) {
-    recordType = [];
-    for(idx=0;idx<len;idx++) recordType[idx] = dataHashes[idx].recordType;
-  }
-
-  // call new API.  Returns storeKeys
-  ret = store.loadRecords(recordType, dataHashes);
-
-  // map to SC.Record instances
-  len = ret.length;
-  for(idx=0;idx<len;idx++) ret[idx] = store.materializeRecord(ret[idx]);
-
-  return ret ;
-};
-
-/** @private
-
-  DEPRECATED
-
-  Finds a record with the passed guid on the default store.  This is included
-  only for compatibility.  You should use the newer `find()` method defined on
-  `SC.Store` instead.
-
-  @param {String} guid the guid
-  @param {SC.Record} recordType expected record type
-  @returns {SC.Record} found record
-*/
-SC.Store.find = function(guid, recordType) {
-  return this._getDefaultStore().find(recordType, guid);
-};
-
-/** @private
-
-  DEPRECATED
-
-  Passes through to `findAll` on default store.  This is included only for
-  compatibility.  You should use the newer `findAll()` defined on `SC.Store`
-  instead.
-
-  @param {Hash} filter search parameters
-  @param {SC.Record} recordType type of record to find
-  @returns {SC.RecordArray} result set
-*/
-SC.Store.findAll = function(filter, recordType) {
-  return this._getDefaultStore().findAll(filter, recordType);
-};

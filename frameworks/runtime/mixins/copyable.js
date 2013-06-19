@@ -8,7 +8,7 @@
 /**
   @class
 
-  Impelements some standard methods for copying an object.  Add this mixin to
+  Implements some standard methods for copying an object.  Add this mixin to
   any object you create that can create a copy of itself.  This mixin is
   added automatically to the built-in array.
 
@@ -37,7 +37,7 @@ SC.Copyable = /** @scope SC.Copyable.prototype */{
   */
   copy: function(deep) {
     var className = SC._object_className(this.constructor);
-    throw "%@.copy() is not implemented".fmt(className);
+    throw new Error("%@.copy() is not implemented".fmt(className));
   },
 
   /**
@@ -56,7 +56,7 @@ SC.Copyable = /** @scope SC.Copyable.prototype */{
   frozenCopy: function() {
     var isFrozen = this.get ? this.get('isFrozen') : this.isFrozen;
     if (isFrozen === YES) return this;
-    else if (isFrozen === undefined) throw "%@ does not support freezing".fmt(this);
+    else if (isFrozen === undefined) throw new Error("%@ does not support freezing".fmt(this));
     else return this.copy().freeze();
   }
 };

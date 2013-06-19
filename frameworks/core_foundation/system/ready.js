@@ -5,30 +5,29 @@
 // License:   Licensed under MIT license (see license.js)
 // ==========================================================================
 
-/*global main */
 
 SC.BENCHMARK_LOG_READY = YES;
 
-sc_require('system/event') ;
+sc_require('system/event');
 
 SC.mixin({
   isReady: NO,
-  
+
   /**
     Allows apps to avoid automatically attach the ready handlers if they
     want to by setting this flag to YES
-    
-    @property {Boolean}
+
+    @type Boolean
   */
   suppressOnReady: SC.suppressOnReady ? YES : NO,
-  
+
   /**
     Allows apps to avoid automatically invoking main() when onReady is called
-    
-    @property {Boolean}
+
+    @type Boolean
   */
   suppressMain: SC.suppressMain ? YES : NO,
-  
+
   /**
     Add the passed target and method to the queue of methods to invoke when
     the document is ready.  These methods will be called after the document
@@ -43,58 +42,62 @@ SC.mixin({
     @param method {Function} method name or function to execute
     @returns {SC}
   */
-  ready: function(target, method) {
+  ready: function (target, method) {
     var queue = SC._readyQueue;
-    
+
     // normalize
     if (method === undefined) {
-      method = target; target = null ;
+      method = target;
+      target = null;
     } else if (SC.typeOf(method) === SC.T_STRING) {
-      method = target[method] ;
+      method = target[method];
     }
 
-    if(SC.isReady) {
-      jQuery(document).ready(function() { method.call(target); });
+    if (SC.isReady) {
+      jQuery(document).ready(function () { method.call(target); });
+    } else {
+      if (!queue) SC._readyQueue = [];
+      SC._readyQueue.push(function () { method.call(target); });
     }
-    else {
-      if(!queue) SC._readyQueue = [];
-      SC._readyQueue.push(function() { method.call(target); });
-    }
-    
-    return this ;
+
+    return this;
   },
 
   onReady: {
-    done: function() {
-      if(SC.isReady) return;
+    done: function () {
+      if (SC.isReady) return;
+
       SC.isReady = true;
-      
+
       SC.RunLoop.begin();
-      
+
       SC.Locale.createCurrentLocale();
-      jQuery("body").addClass(SC.Locale.currentLanguage.toLowerCase());
-      
+      var loc = SC.Locale.currentLanguage.toLowerCase();
+      jQuery("body").addClass(loc);
+
+      jQuery("html").attr("lang", loc);
+
       jQuery("#loading").remove();
-      
+
       var queue = SC._readyQueue, idx, len;
-      
-      if(queue) {
-        for(idx=0,len=queue.length;idx<len;idx++) {
+
+      if (queue) {
+        for (idx = 0, len = queue.length; idx < len; idx++) {
           queue[idx].call();
         }
         SC._readyQueue = null;
       }
-      
-      if(window.main && !SC.suppressMain && (SC.mode === SC.APP_MODE)) { window.main(); }
+
+      if (window.main && !SC.suppressMain && (SC.mode === SC.APP_MODE)) { window.main(); }
       SC.RunLoop.end();
     }
   }
 
-}) ;
+});
 
 // let apps ignore the regular onReady handling if they need to
-if(!SC.suppressOnReady) {
-  jQuery.event.special.ready._default = SC.onReady.done;
+if (!SC.suppressOnReady) {
+  $(document).ready(SC.onReady.done);
 }
 
 // default to app mode.  When loading unit tests, this will run in test mode

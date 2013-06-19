@@ -67,12 +67,15 @@ SC.TreeController = SC.ObjectController.extend(SC.SelectionSupport,
     use this property directly.  Instead, work on the tree content using the
     TreeController like you would any other ObjectController.
 
-    @property {SC.Array}
+    @type SC.Array
   */
   arrangedObjects: function() {
     var ret, content = this.get('content');
     if (content) {
       ret = SC.TreeItemObserver.create({ item: content, delegate: this });
+      ret.bind('allowsSelection', this, 'allowsSelection');
+      ret.bind('allowsMultipleSelection', this, 'allowsMultipleSelection');
+      ret.bind('allowsEmptySelection', this, 'allowsEmptySelection');
     } else ret = null; // empty!
     this._sctc_arrangedObjects = ret ;
 
@@ -110,7 +113,7 @@ SC.TreeController = SC.ObjectController.extend(SC.SelectionSupport,
   /**
     @private
 
-    Returns the first item in arrangeObjects that is not a group.  This uses
+    Returns the first item in arrangedObjects that is not a group.  This uses
     a brute force approach right now; we assume you probably don't have a lot
     of groups up front.
   */

@@ -46,7 +46,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     ArrayController will wrap the item in an array in an attempt to normalize
     the result.
 
-    @property {SC.Array}
+    @type SC.Array
   */
   content: null,
 
@@ -54,7 +54,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     Makes the array editable or not.  If this is set to NO, then any attempts
     at changing the array content itself will throw an exception.
 
-    @property {Boolean}
+    @type Boolean
   */
   isEditable: YES,
 
@@ -63,8 +63,14 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
 
     If you set this property to a key name, array of key names, or a function,
     then then ArrayController will automatically reorder your content array
-    to match the sort order.  (If you set a function, the function will be
-    used to sort).
+    to match the sort order.  When using key names, you may specify the
+    direction of the sort by appending ASC or DESC to the key name.  By default
+    sorting is done in ascending order.
+
+    For example,
+
+        myController.set('orderBy', 'title DESC');
+        myController.set('orderBy', ['lastName ASC', 'firstName DESC']);
 
     Normally, you should only use this property if you set the content of the
     controller to an unordered enumerable such as SC.Set or SC.SelectionSet.
@@ -84,7 +90,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
 
     If you pass a function, it should be suitable for use in compare().
 
-    @property {String|Array|Function}
+    @type String|Array|Function
   */
   orderBy: null,
 
@@ -93,7 +99,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     in an array and publish it.  Otherwise, it will treat single content like
     null content.
 
-    @property {Boolean}
+    @type Boolean
   */
   allowsSingleContent: YES,
 
@@ -106,7 +112,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     removeObject() will still destroy the object in question as well as
     removing it from the parent array.
 
-    @property {Boolean}
+    @type Boolean
   */
   destroyOnRemoval: NO,
 
@@ -115,7 +121,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     Depending on how you have your ArrayController configured, this property
     may be one of several different values.
 
-    @property {SC.Array}
+    @type SC.Array
   */
   arrangedObjects: function() {
     return this;
@@ -126,7 +132,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     remove content.  You can delete content only if the content is not single
     content and isEditable is YES.
 
-    @property {Boolean}
+    @type Boolean
   */
   canRemoveContent: function() {
     var content = this.get('content'), ret;
@@ -143,7 +149,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     real SC.Array-like object.  You cannot reorder content when orderBy is
     non-null.
 
-    @property {Boolean}
+    @type Boolean
   */
   canReorderContent: function() {
     var content = this.get('content'), ret;
@@ -160,7 +166,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     use the addObject() or pushObject() methods.  All other methods imply
     reordering and will fail.
 
-    @property {Boolean}
+    @type Boolean
   */
   canAddContent: function() {
     var content = this.get('content'), ret ;
@@ -176,7 +182,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     even an empty array.  Returns NO if the content is null or not enumerable
     and allowsSingleContent is NO.
 
-    @property {Boolean}
+    @type Boolean
   */
   hasContent: function() {
     var content = this.get('content');
@@ -188,7 +194,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     Returns the current status property for the content.  If the content does
     not have a status property, returns SC.Record.READY.
 
-    @property {Number}
+    @type Number
   */
   status: function() {
     var content = this.get('content'),
@@ -208,22 +214,22 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     If the source content does not support adding an object, then this method
     will throw an exception.
 
-    @param {Object} object the object to add
-    @returns {SC.ArrayController} receiver
+    @param {Object} object The object to add to the array.
+    @returns {SC.ArrayController} The receiver.
   */
   addObject: function(object) {
-    if (!this.get('canAddContent')) { throw "%@ cannot add content".fmt(this); }
+    if (!this.get('canAddContent')) { throw new Error("%@ cannot add content".fmt(this)); }
 
     var content = this.get('content');
     if (content.isSCArray) { content.pushObject(object); }
     else if (content.addObject) { content.addObject(object); }
-    else { throw "%@.content does not support addObject".fmt(this); }
+    else { throw new Error("%@.content does not support addObject".fmt(this)); }
 
     return this;
   },
 
   /**
-    Removes the passed object from the array.  If the underyling content
+    Removes the passed object from the array.  If the underlying content
     is a single object, then this simply sets the content to null.  Otherwise
     it will call removeObject() on the content.
 
@@ -234,7 +240,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
   */
   removeObject: function(object) {
     if (!this.get('canRemoveContent')) {
-      throw "%@ cannot remove content".fmt(this);
+      throw new Error("%@ cannot remove content".fmt(this));
     }
 
     var content = this.get('content');
@@ -255,7 +261,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
   /**
     Compute the length of the array based on the observable content
 
-    @property {Number}
+    @type Number
   */
   length: function() {
     var content = this._scac_observableContent();
@@ -277,10 +283,10 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     // check for various conditions before a replace is allowed
     if (!objects || objects.get('length')===0) {
       if (!this.get('canRemoveContent')) {
-        throw "%@ cannot remove objects from the current content".fmt(this);
+        throw new Error("%@ cannot remove objects from the current content".fmt(this));
       }
     } else if (!this.get('canReorderContent')) {
-      throw "%@ cannot add or reorder the current content".fmt(this);
+      throw new Error("%@ cannot add or reorder the current content".fmt(this));
     }
 
     // if we can do this, then just forward the change.  This should fire
@@ -355,7 +361,7 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     var orderBy = this.get('orderBy');
     if (!orderBy) {
       if (content.isSCArray) { return (this._scac_cached = content) ; }
-      else { throw "%@.orderBy is required for unordered content".fmt(this); }
+      else { throw new Error("%@.orderBy is required for unordered content".fmt(this)); }
     }
 
     // all remaining enumerables must be sorted.
@@ -368,23 +374,32 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     } else if(type === SC.T_FUNCTION) {
       func = orderBy;
     } else if(type !== SC.T_ARRAY) {
-      throw "%@.orderBy must be Array, String, or Function".fmt(this);
+      throw new Error("%@.orderBy must be Array, String, or Function".fmt(this));
     }
 
     // generate comparison function if needed - use orderBy
     func = func || function(a,b) {
-      var status, key, match, descending;
+      var status, key, match, valueA, valueB;
 
       for(var i=0, l=orderBy.get('length'); i<l && !status; i++) {
         key = orderBy.objectAt(i);
 
-        match = key.match(/^(ASC )?(DESC )?(.*)$/);
-        key = match[3]; order = match[2] ? -1 : 1;
+        if (key.search(/(ASC|DESC)/) === 0) {
+          //@if(debug)
+          SC.warn("Developer Warning: SC.ArrayController's orderBy direction syntax has been changed to match that of SC.Query and MySQL.  Please change your String to 'key DESC' or 'key ASC'.  Having 'ASC' or 'DESC' precede the key has been deprecated.");
+          //@endif
+          match = key.match(/^(ASC )?(DESC )?(.*)$/);
+          key = match[3];
+        } else {
+          match = key.match(/^(\S*)\s*(DESC)?(?:ASC)?$/);
+          key = match[1];
+        }
+        order = match[2] ? -1 : 1;
 
-        if (a) { a = a.isObservable ? a.get(key) : a[key]; }
-        if (b) { b = b.isObservable ? b.get(key) : b[key]; }
+        if (a) { valueA = a.isObservable ? a.get(key) : a[key]; }
+        if (b) { valueB = b.isObservable ? b.get(key) : b[key]; }
 
-        status = SC.compare(a, b) * order;
+        status = SC.compare(valueA, valueB) * order;
       }
 
       return status ;
@@ -410,12 +425,12 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
   },
 
   _scac_arrayContentDidChange: function(start, removed, added) {
+    this._scac_cached = NO;
     this.arrayContentDidChange(start, removed, added);
     if (this._kvo_enumerable_property_chains) {
       var addedObjects = this.slice(start, start+added);
       this.setupEnumerablePropertyChains(addedObjects);
     }
-    this._scac_cached = NO;
     this.updateSelectionAfterContentChange();
   },
 
@@ -519,12 +534,13 @@ SC.ArrayController = SC.Controller.extend(SC.Array, SC.SelectionSupport,
     // of knowing which indices changed. Instead, we just
     // invalidate the whole array.
     this.arrayContentDidChange(0, oldlen, newlen);
+    this.enumerableContentDidChange(0, oldlen - 1);
     this.endPropertyChanges();
     this.updateSelectionAfterContentChange();
   }.observes('orderBy'),
 
   /** @private
-    Whenver the content "status" property changes, relay out.
+    Whenever the content "status" property changes, relay out.
   */
   _scac_contentStatusDidChange: function() {
     this.notifyPropertyChange('status');

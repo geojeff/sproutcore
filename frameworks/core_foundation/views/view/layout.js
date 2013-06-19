@@ -1,5 +1,5 @@
 sc_require("views/view");
-sc_require('views/view/layout_style') ;
+sc_require('views/view/layout_style');
 
 /** Select a horizontal layout for various views.*/
 SC.LAYOUT_HORIZONTAL = 'sc-layout-horizontal';
@@ -36,7 +36,7 @@ SC.View.reopen(
   /** @scope SC.View.prototype */ {
 
   /**
-    Set to YES to indicate the view has visibility support added.
+    Set to YES to indicate the view has layout support added.
   */
   hasLayout: YES,
 
@@ -48,17 +48,15 @@ SC.View.reopen(
     element.  If you plan to create many view instances it is probably better
     to use CSS.
 
-    @property {String}
+    @type String
   */
   backgroundColor: null,
-
-  displayProperties: ['backgroundColor'],
 
   /**
     Activates use of brower's static layout. To activate, set this
     property to YES.
 
-    @property {Boolean}
+    @type Boolean
   */
   useStaticLayout: NO,
 
@@ -66,13 +64,19 @@ SC.View.reopen(
   // LAYOUT
   //
 
-  init: function(original) {
+  /** @private */
+  init: function (original) {
     original();
 
-    // TODO: This makes it impossible to override
-    this.layoutStyleCalculator = SC.View.LayoutStyleCalculator.create({ view: this });
-
     this._previousLayout = this.get('layout');
+  }.enhance(),
+
+  /** @private */
+  destroy: function (original) {
+    // Clean up.
+    this._previousLayout = null;
+
+    return original();
   }.enhance(),
 
   /**
@@ -86,7 +90,7 @@ SC.View.reopen(
     be invalid, we need to force layoutDidChange() to always immediately run
     whenever 'layout' is set.
   */
-  propertyDidChange: function(key, value, _keepCache) {
+  propertyDidChange: function (key, value, _keepCache) {
     // If the key is 'layout', we need to call layoutDidChange() immediately
     // so that if the frame has changed any cached values (for both this view
     // and any child views) can be appropriately invalidated.
@@ -95,11 +99,11 @@ SC.View.reopen(
     // changed and if layout is dependent on the property.
     // If it is we call layoutDidChange.
     var layoutChange = false;
-    if(typeof this.layout === "function" && this._kvo_dependents) {
+    if (typeof this.layout === "function" && this._kvo_dependents) {
       var dependents = this._kvo_dependents[key];
-      if(dependents && dependents.indexOf('layout')!=-1) { layoutChange = true; }
+      if (dependents && dependents.indexOf('layout') != -1) { layoutChange = true; }
     }
-    if(key==='layout' || layoutChange) { this.layoutDidChange(); }
+    if (key === 'layout' || layoutChange) { this.layoutDidChange(); }
     // Resume notification as usual.
     sc_super();
   },
@@ -120,47 +124,45 @@ SC.View.reopen(
     @param {Object} value
     @returns {SC.View} receiver
   */
-  adjust: function(key, value) {
+  adjust: function (key, value) {
     var layout = this.get('layout'), didChange = NO, cur, hash;
 
-    if (key === undefined) { return this ; } // nothing to do.
+    if (key === undefined) { return this; } // nothing to do.
 
     // handle string case
     if (SC.typeOf(key) === SC.T_STRING) {
       // this is copied from below
       cur = layout[key];
 
-      if(value === undefined || cur == value) return this;
+      if (value === undefined || cur == value) return this;
 
       layout = SC.clone(layout);
 
-      if(value === null) {
+      if (value === null) {
         delete layout[key];
       } else {
         layout[key] = value;
       }
 
       didChange = YES;
-    }
-
-    else {
+    } else {
       hash = key;
 
-      for(key in hash) {
+      for (key in hash) {
         if (!hash.hasOwnProperty(key)) { continue; }
 
-        value = hash[key] ;
-        cur = layout[key] ;
+        value = hash[key];
+        cur = layout[key];
 
         if (value === undefined || cur == value) { continue; }
 
         // only clone the layout the first time we see a change
-        if(!didChange) layout = SC.clone(layout);
+        if (!didChange) layout = SC.clone(layout);
 
         if (value === null) {
-          delete layout[key] ;
+          delete layout[key];
         } else {
-          layout[key] = value ;
+          layout[key] = value;
         }
 
         didChange = YES;
@@ -169,10 +171,10 @@ SC.View.reopen(
 
     // now set adjusted layout
     if (didChange) {
-      this.set('layout', layout) ;
+      this.set('layout', layout);
     }
 
-    return this ;
+    return this;
   },
 
   /**
@@ -196,6 +198,7 @@ SC.View.reopen(
      - borderRight: right border
      - borderBottom: bottom border
      - borderLeft: bottom left
+     - opacity: the opacity of the view
      - zIndex: position above or below other views
 
     Note that you can only use certain combinations to set layout.  For
@@ -214,33 +217,64 @@ SC.View.reopen(
   layout: { top: 0, left: 0, bottom: 0, right: 0 },
 
   /**
-    Returns whether the layout is 'fixed' or not.  A fixed layout has a fixed
-    left & top position within its parent's frame as well as a fixed width and height.
-    Fixed layouts are therefore unaffected by changes to their parent view's
-    layout.
+    Returns whether the layout is 'fixed' or not.  A fixed layout means a
+    fixed left & top position and fixed width & height.  Fixed layouts are
+    therefore unaffected by changes to their parent view's layout.
 
     @returns {Boolean} YES if fixed, NO otherwise
     @test in layoutStyle
   */
-  isFixedLayout: function() {
+  isFixedLayout: function () {
+    return this.get('isFixedPosition') && this.get('isFixedSize');
+  }.property('isFixedPosition', 'isFixedSize').cacheable(),
+
+  /**
+    Returns whether the position is 'fixed' or not.  A fixed position means a
+    fixed left & top position within its parent's frame.  Fixed positions are
+    therefore unaffected by changes to their parent view's size.
+
+    @returns {Boolean} YES if fixed, NO otherwise
+    @test in layoutStyle
+  */
+  isFixedPosition: function () {
     var layout = this.get('layout'),
         ret;
 
-    // Layout is fixed if it has width + height !== SC.LAYOUT_AUTO and left + top
+    // Position is fixed if it has left + top !== SC.LAYOUT_AUTO
     ret = (
-      ((layout.width !== undefined) && (layout.height !== undefined)) &&
-      ((layout.width !== SC.LAYOUT_AUTO) && (layout.height !== SC.LAYOUT_AUTO)) &&
-      ((layout.left !== undefined) && (layout.top !== undefined))
+      ((layout.left !== undefined) && (layout.top !== undefined)) &&
+      ((layout.left !== SC.LAYOUT_AUTO) && (layout.top !== SC.LAYOUT_AUTO))
     );
 
-    // The layout may appear fixed, but only if none of the values are percentages
+    // The position may appear fixed, but only if none of the values are percentages.
     if (ret) {
-      ret = (
-        !SC.isPercentage(layout.top) &&
-        !SC.isPercentage(layout.left) &&
-        !SC.isPercentage(layout.width) &&
-        !SC.isPercentage(layout.height)
-      );
+      ret = (!SC.isPercentage(layout.top) && !SC.isPercentage(layout.left));
+    }
+
+    return ret;
+  }.property('layout').cacheable(),
+
+  /**
+    Returns whether the size is 'fixed' or not.  A fixed size means a fixed
+    width and height.  Fixed sizes are therefore unaffected by changes to their
+    parent view's size.
+
+    @returns {Boolean} YES if fixed, NO otherwise
+    @test in layoutStyle
+  */
+  isFixedSize: function () {
+    var layout = this.get('layout'),
+        ret;
+
+    // Size is fixed if it has width + height !== SC.LAYOUT_AUTO
+    ret = (
+      ((layout.width !== undefined) && (layout.height !== undefined)) &&
+      ((layout.width !== SC.LAYOUT_AUTO) && (layout.height !== SC.LAYOUT_AUTO))
+    );
+
+    // The size may appear fixed, but only if none of the values are percentages.
+    if (ret) {
+      ret = (!SC.isPercentage(layout.width) && !SC.isPercentage(layout.height));
     }
 
     return ret;
@@ -263,28 +297,32 @@ SC.View.reopen(
     @returns {Rect} converted frame
     @test in convertFrames
   */
-  convertFrameToView: function(frame, targetView) {
-    var myX=0, myY=0, targetX=0, targetY=0, view = this, f ;
+  convertFrameToView: function (frame, targetView) {
+    var myX = 0, myY = 0, targetX = 0, targetY = 0, view = this, f;
 
     // walk up this side
     while (view) {
-      f = view.get('frame'); myX += f.x; myY += f.y ;
-      view = view.get('layoutView') ;
+      f = view.get('frame');
+      myX += f.x;
+      myY += f.y;
+      view = view.get('layoutView');
     }
 
     // walk up other size
     if (targetView) {
-      view = targetView ;
+      view = targetView;
       while (view) {
-        f = view.get('frame'); targetX += f.x; targetY += f.y ;
-        view = view.get('layoutView') ;
+        f = view.get('frame');
+        targetX += f.x;
+        targetY += f.y;
+        view = view.get('layoutView');
       }
     }
 
     // now we can figure how to translate the origin.
-    myX = frame.x + myX - targetX ;
-    myY = frame.y + myY - targetY ;
-    return { x: myX, y: myY, width: frame.width, height: frame.height } ;
+    myX = frame.x + myX - targetX;
+    myY = frame.y + myY - targetY;
+    return { x: myX, y: myY, width: frame.width, height: frame.height };
   },
 
   /**
@@ -303,29 +341,32 @@ SC.View.reopen(
     @returns {Rect} converted frame
     @test in converFrames
   */
-  convertFrameFromView: function(frame, targetView) {
-    var myX=0, myY=0, targetX=0, targetY=0, view = this, f ;
+  convertFrameFromView: function (frame, targetView) {
+    var myX = 0, myY = 0, targetX = 0, targetY = 0, view = this, f;
 
     // walk up this side
     //Note: Intentional assignment of variable f
     while (view && (f = view.get('frame'))) {
-      myX += f.x; myY += f.y ;
-      view = view.get('parentView') ;
+      myX += f.x;
+      myY += f.y;
+      view = view.get('parentView');
     }
 
     // walk up other size
     if (targetView) {
-      view = targetView ;
-      while(view) {
-        f = view.get('frame'); targetX += f.x; targetY += f.y ;
-        view = view.get('parentView') ;
+      view = targetView;
+      while (view) {
+        f = view.get('frame');
+        targetX += f.x;
+        targetY += f.y;
+        view = view.get('parentView');
       }
     }
 
     // now we can figure how to translate the origin.
-    myX = frame.x - myX + targetX ;
-    myY = frame.y - myY + targetY ;
-    return { x: myX, y: myY, width: frame.width, height: frame.height } ;
+    myX = frame.x - myX + targetX;
+    myY = frame.y - myY + targetY;
+    return { x: myX, y: myY, width: frame.width, height: frame.height };
   },
 
   /**
@@ -337,24 +378,30 @@ SC.View.reopen(
 
     @returns {Boolean}
   */
-  scrollToVisible: function() {
+  scrollToVisible: function () {
     var pv = this.get('parentView');
-    while(pv && !pv.get('isScrollable')) { pv = pv.get('parentView'); }
+    while (pv && !pv.get('isScrollable')) { pv = pv.get('parentView'); }
 
     // found view, first make it scroll itself visible then scroll this.
     if (pv) {
       pv.scrollToVisible();
       return pv.scrollToVisible(this);
     } else {
-      return NO ;
+      return NO;
     }
   },
 
-  _adjustForBorder: function(frame, layout){
-    var borderTop = ((layout.borderTop !== undefined) ? layout.borderTop : layout.border) || 0,
-        borderLeft = ((layout.borderLeft !== undefined) ? layout.borderLeft : layout.border) || 0,
-        borderBottom = ((layout.borderBottom !== undefined) ? layout.borderBottom : layout.border) || 0,
-        borderRight = ((layout.borderRight !== undefined) ? layout.borderRight : layout.border) || 0;
+  /** @private */
+  _effectiveBorderFor: function (layoutName, layout) {
+    return ((layout[layoutName] !== undefined) ? layout[layoutName] : layout.border) || 0;
+  },
+
+  /** @private */
+  _adjustForBorder: function (frame, layout) {
+    var borderTop = this._effectiveBorderFor('borderTop', layout),
+        borderLeft = this._effectiveBorderFor('borderLeft', layout),
+        borderBottom = this._effectiveBorderFor('borderBottom', layout),
+        borderRight = this._effectiveBorderFor('borderRight', layout);
 
     frame.x += borderLeft; // The border on the left pushes the frame to the right
     frame.y += borderTop; // The border on the top pushes the frame down
@@ -379,7 +426,7 @@ SC.View.reopen(
     @param {Rect} pdim the projected parent dimensions
     @returns {Rect} the computed frame
   */
-  computeFrameWithParentFrame: function(original, pdim) {
+  computeFrameWithParentFrame: function (original, pdim) {
     var f, layout = this.get('layout');
 
     // We can't predict the frame for static layout, so just return the view's
@@ -404,124 +451,124 @@ SC.View.reopen(
         lcY = layout.centerY;
 
     if (lW === AUTO) {
-      error = SC.Error.desc(("%@.layout() cannot use width:auto if "+
-                "staticLayout is disabled").fmt(this), "%@".fmt(this), -1);
-      SC.Logger.error(error.toString()) ;
-      throw error ;
+      error = SC.Error.desc(("%@.layout() cannot use width:auto if " +
+        "staticLayout is disabled").fmt(this), "%@".fmt(this), -1);
+      SC.Logger.error(error.toString());
+      throw error;
     }
 
     if (lH === AUTO) {
-       error = SC.Error.desc(("%@.layout() cannot use height:auto if "+
-                "staticLayout is disabled").fmt(this),"%@".fmt(this), -1);
-       SC.Logger.error(error.toString())  ;
-      throw error ;
+      error = SC.Error.desc(("%@.layout() cannot use height:auto if " +
+        "staticLayout is disabled").fmt(this), "%@".fmt(this), -1);
+      SC.Logger.error(error.toString());
+      throw error;
     }
 
-    if (!pdim) { pdim = this.computeParentDimensions(layout) ; }
+    if (!pdim) { pdim = this.computeParentDimensions(layout); }
     dH = pdim.height;
     dW = pdim.width;
 
     // handle left aligned and left/right
     if (!SC.none(lL)) {
-      if(SC.isPercentage(lL)){
-        f.x = dW*lL;
-      }else{
-        f.x = lL ;
+      if (SC.isPercentage(lL)) {
+        f.x = dW * lL;
+      } else {
+        f.x = lL;
       }
       if (lW !== undefined) {
-        if(lW === AUTO) { f.width = AUTO ; }
-        else if(SC.isPercentage(lW)) { f.width = dW*lW ; }
-        else { f.width = lW ; }
+        if (lW === AUTO) { f.width = AUTO; }
+        else if (SC.isPercentage(lW)) { f.width = dW * lW; }
+        else { f.width = lW; }
       } else { // better have lR!
-        f.width = dW - f.x ;
-        if(lR && SC.isPercentage(lR)) { f.width = f.width - (lR*dW) ; }
-        else { f.width = f.width - (lR || 0) ; }
+        f.width = dW - f.x;
+        if (lR && SC.isPercentage(lR)) { f.width = f.width - (lR * dW); }
+        else { f.width = f.width - (lR || 0); }
       }
     // handle right aligned
     } else if (!SC.none(lR)) {
       if (SC.none(lW)) {
         if (SC.isPercentage(lR)) {
-          f.width = dW - (dW*lR) ;
+          f.width = dW - (dW * lR);
         }
-        else f.width = dW - lR ;
-        f.x = 0 ;
+        else f.width = dW - lR;
+        f.x = 0;
       } else {
-        if(lW === AUTO) f.width = AUTO ;
-        else if(SC.isPercentage(lW)) f.width = dW*lW ;
-        else f.width = (lW || 0) ;
-        if (SC.isPercentage(lW)) f.x = dW - (lR*dW) - f.width ;
-        else f.x = dW - lR - f.width ;
+        if (lW === AUTO) f.width = AUTO;
+        else if (SC.isPercentage(lW)) f.width = dW * lW;
+        else f.width = (lW || 0);
+        if (SC.isPercentage(lW)) f.x = dW - (lR * dW) - f.width;
+        else f.x = dW - lR - f.width;
       }
 
     // handle centered
     } else if (!SC.none(lcX)) {
-      if(lW === AUTO) f.width = AUTO ;
-      else if (SC.isPercentage(lW)) f.width = lW*dW ;
-      else f.width = (lW || 0) ;
-      if(SC.isPercentage(lcX)) f.x = (dW - f.width)/2 + (lcX*dW) ;
-      else f.x = (dW - f.width)/2 + lcX ;
+      if (lW === AUTO) f.width = AUTO;
+      else if (SC.isPercentage(lW)) f.width = lW * dW;
+      else f.width = (lW || 0);
+      if (SC.isPercentage(lcX)) f.x = (dW - f.width) / 2 + (lcX * dW);
+      else f.x = (dW - f.width) / 2 + lcX;
     } else {
-      f.x = 0 ; // fallback
+      f.x = 0; // fallback
       if (SC.none(lW)) {
-        f.width = dW ;
+        f.width = dW;
       } else {
-        if(lW === AUTO) f.width = AUTO ;
-        if (SC.isPercentage(lW)) f.width = lW*dW ;
-        else f.width = (lW || 0) ;
+        if (lW === AUTO) f.width = AUTO;
+        if (SC.isPercentage(lW)) f.width = lW * dW;
+        else f.width = (lW || 0);
       }
     }
 
     // handle top aligned and top/bottom
     if (!SC.none(lT)) {
-      if(SC.isPercentage(lT)) f.y = lT*dH ;
-      else f.y = lT ;
+      if (SC.isPercentage(lT)) f.y = lT * dH;
+      else f.y = lT;
       if (lH !== undefined) {
-        if(lH === AUTO) f.height = AUTO ;
-        else if(SC.isPercentage(lH)) f.height = lH*dH ;
-        else f.height = lH ;
+        if (lH === AUTO) f.height = AUTO;
+        else if (SC.isPercentage(lH)) f.height = lH * dH;
+        else f.height = lH;
       } else { // better have lB!
-        if(lB && SC.isPercentage(lB)) f.height = dH - f.y - (lB*dH) ;
-        else f.height = dH - f.y - (lB || 0) ;
+        if (lB && SC.isPercentage(lB)) f.height = dH - f.y - (lB * dH);
+        else f.height = dH - f.y - (lB || 0);
       }
 
     // handle bottom aligned
     } else if (!SC.none(lB)) {
       if (SC.none(lH)) {
-        if (SC.isPercentage(lB)) f.height = dH - (lB*dH) ;
-        else f.height = dH - lB ;
-        f.y = 0 ;
+        if (SC.isPercentage(lB)) f.height = dH - (lB * dH);
+        else f.height = dH - lB;
+        f.y = 0;
       } else {
-        if(lH === AUTO) f.height = AUTO ;
-        if (lH && SC.isPercentage(lH)) f.height = lH*dH ;
-        else f.height = (lH || 0) ;
-        if (SC.isPercentage(lB)) f.y = dH - (lB*dH) - f.height ;
-        else f.y = dH - lB - f.height ;
+        if (lH === AUTO) f.height = AUTO;
+        if (lH && SC.isPercentage(lH)) f.height = lH * dH;
+        else f.height = (lH || 0);
+        if (SC.isPercentage(lB)) f.y = dH - (lB * dH) - f.height;
+        else f.y = dH - lB - f.height;
       }
 
     // handle centered
     } else if (!SC.none(lcY)) {
-      if(lH === AUTO) f.height = AUTO ;
-      if (lH && SC.isPercentage(lH)) f.height = lH*dH ;
-      else f.height = (lH || 0) ;
-      if (SC.isPercentage(lcY)) f.y = (dH - f.height)/2 + (lcY*dH) ;
-      else f.y = (dH - f.height)/2 + lcY ;
+      if (lH === AUTO) f.height = AUTO;
+      if (lH && SC.isPercentage(lH)) f.height = lH * dH;
+      else f.height = (lH || 0);
+      if (SC.isPercentage(lcY)) f.y = (dH - f.height) / 2 + (lcY * dH);
+      else f.y = (dH - f.height) / 2 + lcY;
 
     // fallback
     } else {
-      f.y = 0 ; // fallback
+      f.y = 0; // fallback
       if (SC.none(lH)) {
-        f.height = dH ;
+        f.height = dH;
       } else {
-        if(lH === AUTO) f.height = AUTO ;
-        if (SC.isPercentage(lH)) f.height = lH*dH ;
-        else f.height = lH || 0 ;
+        if (lH === AUTO) f.height = AUTO;
+        if (SC.isPercentage(lH)) f.height = lH * dH;
+        else f.height = lH || 0;
       }
     }
 
     f.x = Math.floor(f.x);
     f.y = Math.floor(f.y);
-    if(f.height !== AUTO) f.height = Math.floor(f.height);
-    if(f.width !== AUTO) f.width = Math.floor(f.width);
+    if (f.height !== AUTO) f.height = Math.floor(f.height);
+    if (f.width !== AUTO) f.width = Math.floor(f.width);
 
     // if width or height were set to auto and we have a layer, try lookup
     if (f.height === AUTO || f.width === AUTO) {
@@ -542,30 +589,30 @@ SC.View.reopen(
 
     // make sure the width/height fix min/max...
     if (!SC.none(layout.maxHeight) && (f.height > layout.maxHeight)) {
-      f.height = layout.maxHeight ;
+      f.height = layout.maxHeight;
     }
 
     if (!SC.none(layout.minHeight) && (f.height < layout.minHeight)) {
-      f.height = layout.minHeight ;
+      f.height = layout.minHeight;
     }
 
     if (!SC.none(layout.maxWidth) && (f.width > layout.maxWidth)) {
-      f.width = layout.maxWidth ;
+      f.width = layout.maxWidth;
     }
 
     if (!SC.none(layout.minWidth) && (f.width < layout.minWidth)) {
-      f.width = layout.minWidth ;
+      f.width = layout.minWidth;
     }
 
     // make sure width/height are never < 0
-    if (f.height < 0) f.height = 0 ;
-    if (f.width < 0) f.width = 0 ;
+    if (f.height < 0) f.height = 0;
+    if (f.width < 0) f.width = 0;
 
     return f;
   }.enhance(),
 
-  computeParentDimensions: function(frame) {
-    var ret, pv = this.get('parentView'), pf = (pv) ? pv.get('frame') : null ;
+  computeParentDimensions: function (frame) {
+    var ret, pv = this.get('parentView'), pf = (pv) ? pv.get('frame') : null;
 
     if (pf) {
       ret = { width: pf.width, height: pf.height };
@@ -576,57 +623,56 @@ SC.View.reopen(
         height: (f.top || 0) + (f.height || 0) + (f.bottom || 0)
       };
     }
-    return ret ;
+    return ret;
   },
 
   /**
     The frame of the view including the borders
   */
-  borderFrame: function(){
+  borderFrame: function () {
     var layout = this.get('layout'),
         frame = this.get('frame'),
-        defaultBorder = layout.border,
-        topBorder = ((layout.topBorder !== undefined) ? layout.topBorder : layout.border) || 0,
-        rightBorder = ((layout.rightBorder !== undefined) ? layout.rightBorder : layout.border) || 0,
-        bottomBorder = ((layout.bottomBorder !== undefined) ? layout.bottomBorder : layout.border) || 0,
-        leftBorder = ((layout.leftBorder !== undefined) ? layout.leftBorder : layout.border) || 0;
+        borderTop = this._effectiveBorderFor('borderTop', layout),
+        borderRight = this._effectiveBorderFor('borderRight', layout),
+        borderBottom = this._effectiveBorderFor('borderBottom', layout),
+        borderLeft = this._effectiveBorderFor('borderLeft', layout);
 
-    return {
-      x: frame.x - leftBorder,
-      y: frame.y - topBorder,
-      width: frame.width + leftBorder + rightBorder,
-      height: frame.height + topBorder + bottomBorder
-    };
+    return frame ? {
+      x: frame.x - borderLeft,
+      y: frame.y - borderTop,
+      width: frame.width + borderLeft + borderRight,
+      height: frame.height + borderTop + borderBottom
+    } : null;
   }.property('frame').cacheable(),
 
   /**
     This method may be called on your view whenever the parent view resizes.
 
     The default version of this method will reset the frame and then call
-    viewDidResize().  You will not usually override this method, but you may
-    override the viewDidResize() method.
+    viewDidResize() if its size may have changed.  You will not usually override
+    this method, but you may override the viewDidResize() method.
 
     @returns {void}
     @test in viewDidResize
   */
-  parentViewDidResize: function() {
-    var frameMayHaveChanged;
+  parentViewDidResize: function () {
+    var positionMayHaveChanged,
+      sizeMayHaveChanged;
 
     // If this view uses static layout, our "do we think the frame changed?"
     // result of isFixedLayout is not applicable and we simply have to assume
     // that the frame may have changed.
-    frameMayHaveChanged = this.useStaticLayout || !this.get('isFixedLayout');
+    sizeMayHaveChanged = this.useStaticLayout || !this.get('isFixedSize');
+    positionMayHaveChanged = !this.get('isFixedPosition');
 
-    // Do we think there's a chance our frame will have changed as a result?
-    if (frameMayHaveChanged) {
-      // There's a chance our frame changed.  Invoke viewDidResize(), which
-      // will notify about our change to 'frame' (if it actually changed) and
-      // appropriately notify our child views.
+    if (sizeMayHaveChanged) {
+      // If our size isn't fixed, our frame may have changed and it will effect our child views.
       this.viewDidResize();
+    } else if (positionMayHaveChanged) {
+      // If our size is fixed but our position isn't, our frame may have changed, but it won't effect our child views.
+      this._viewFrameDidChange();
     }
   },
-
-
 
   /**
     This method is invoked on your view when the view resizes due to a layout
@@ -640,12 +686,12 @@ SC.View.reopen(
 
     @returns {void}
   */
-  viewDidResize: function() {
+  viewDidResize: function () {
     this._viewFrameDidChange();
 
     // Also notify our children.
-    var cv = this.childViews, len, idx, view ;
-    for (idx=0; idx<(len= cv.length); ++idx) {
+    var cv = this.childViews, len, idx, view;
+    for (idx = 0; idx < (len = cv.length); ++idx) {
       view = cv[idx];
       view.tryToPerform('parentViewDidResize');
     }
@@ -657,9 +703,9 @@ SC.View.reopen(
     This notifies the view that its frame property has changed,
     then propagates those changes to its child views.
   */
-  _viewFrameDidChange: function() {
+  _viewFrameDidChange: function () {
     this.notifyPropertyChange('frame');
-    this._sc_view_clippingFrameDidChange();
+    this._callOnChildViews('_sc_view_clippingFrameDidChange');
   },
 
   // Implementation note: As a general rule, paired method calls, such as
@@ -669,7 +715,7 @@ SC.View.reopen(
   //
   // -> View A.beginXXX()
   //   -> View B.beginXXX()
-  //     -> View C.begitXXX()
+  //     -> View C.beginXXX()
   //   -> View D.beginXXX()
   //
   // ...later on, endXXX methods are called in reverse order of beginXXX...
@@ -689,17 +735,17 @@ SC.View.reopen(
     @returns {SC.View} receiver
     @test in viewDidResize
   */
-  beginLiveResize: function() {
+  beginLiveResize: function () {
     // call before children have been notified...
-    if (this.willBeginLiveResize) this.willBeginLiveResize() ;
+    if (this.willBeginLiveResize) this.willBeginLiveResize();
 
     // notify children in order
-    var ary = this.get('childViews'), len = ary.length, idx, view ;
-    for (idx=0; idx<len; ++idx) {
-      view = ary[idx] ;
+    var ary = this.get('childViews'), len = ary.length, idx, view;
+    for (idx = 0; idx < len; ++idx) {
+      view = ary[idx];
       if (view.beginLiveResize) view.beginLiveResize();
     }
-    return this ;
+    return this;
   },
 
   /**
@@ -710,25 +756,25 @@ SC.View.reopen(
     @returns {SC.View} receiver
     @test in viewDidResize
   */
-  endLiveResize: function() {
+  endLiveResize: function () {
     // notify children in *reverse* order
-    var ary = this.get('childViews'), len = ary.length, idx, view ;
-    for (idx=len-1; idx>=0; --idx) { // loop backwards
-      view = ary[idx] ;
-      if (view.endLiveResize) view.endLiveResize() ;
+    var ary = this.get('childViews'), len = ary.length, idx, view;
+    for (idx = len - 1; idx >= 0; --idx) { // loop backwards
+      view = ary[idx];
+      if (view.endLiveResize) view.endLiveResize();
     }
 
     // call *after* all children have been notified...
-    if (this.didEndLiveResize) this.didEndLiveResize() ;
-    return this ;
+    if (this.didEndLiveResize) this.didEndLiveResize();
+    return this;
   },
 
   /**
     The view responsible for laying out this view.  The default version
     returns the current parent view.
   */
-  layoutView: function() {
-    return this.get('parentView') ;
+  layoutView: function () {
+    return this.get('parentView');
   }.property('parentView').cacheable(),
 
   /**
@@ -744,87 +790,77 @@ SC.View.reopen(
 
     @returns {SC.View} receiver
   */
-  layoutDidChange: function() {
+  layoutDidChange: function () {
+    var currentLayout  = this.get('layout');
+
+    // Handle old style rotation.
+    if (!SC.none(currentLayout.rotate)) {
+      //@if (debug)
+      SC.Logger.warn('Developer Warning: Please set rotateX instead of rotate.');
+      //@endif
+      if (SC.none(currentLayout.rotateX)) {
+        currentLayout.rotateX = currentLayout.rotate;
+      }
+      delete currentLayout.rotate;
+    }
+
+    // Optimize notifications depending on if we resized or just moved.
+    this._checkForResize();
+
+    // Notify layoutView/parentView.
+    var layoutView = this.get('layoutView');
+    if (layoutView) {
+      layoutView.set('childViewsNeedLayout', YES);
+      layoutView.layoutDidChangeFor(this);
+
+      // Check if childViewsNeedLayout is still true.
+      if (layoutView.get('childViewsNeedLayout')) {
+        layoutView.invokeOnce(layoutView.layoutChildViewsIfNeeded);
+      }
+    } else {
+      this.invokeOnce(this.updateLayout);
+    }
+
+    return this;
+  },
+
+  /** @private */
+  _checkForResize: function () {
     // Did our layout change in a way that could cause us to be resized?  If
     // not, then there's no need to invalidate the frames of our child views.
     var previousLayout = this._previousLayout,
         currentLayout  = this.get('layout'),
-        didResize      = YES,
-        previousWidth, previousHeight, currentWidth, currentHeight;
+        didResize = true;
 
+    // We test the new layout to see if we believe it will affect the view's frame.
+    // Since all the child view frames may depend on the parent's frame, it's
+    // best only to notify a frame change when it actually happens.
+    if (previousLayout && !SC.none(previousLayout.width) && !SC.none(previousLayout.height) && previousLayout !== currentLayout) {
+      var currentTest,
+        previousTest;
 
-    // Handle old style rotation
-    if (!SC.none(currentLayout.rotate)) {
-      if (SC.none(currentLayout.rotateX)) {
-        currentLayout.rotateX = currentLayout.rotate;
-        SC.Logger.warn('Please set rotateX instead of rotate');
-      }
-    }
-    if (!SC.none(currentLayout.rotateX)) {
-      currentLayout.rotate = currentLayout.rotateX;
-    } else {
-      delete currentLayout.rotate;
-    }
+      // This code already exists in _adjustForBorder, so we use it to test the effective width/height.
+      // TODO: consider checking min/max sizes
+      previousTest = this._adjustForBorder({ x: 0, y: 0, width: previousLayout.width, height: previousLayout.height },
+        previousLayout);
+      currentTest = this._adjustForBorder({ x: 0, y: 0, width: currentLayout.width || 0, height: currentLayout.height || 0 },
+        currentLayout);
 
-    var animations = currentLayout.animations;
-    if (animations) {
-      if (!SC.none(animations.rotate)) {
-        if (SC.none(animations.rotateX)) {
-          animations.rotateX = animations.rotate;
-          SC.Logger.warn('Please animate rotateX instead of rotate');
-        }
-      }
-      if (!SC.none(animations.rotateX)) {
-        animations.rotate = animations.rotateX;
-      } else {
-        delete animations.rotate;
+      if (previousTest.width === currentTest.width && previousTest.height === currentTest.height) {
+        didResize = false;
       }
     }
 
-    if (previousLayout  &&  previousLayout !== currentLayout) {
-      // This is a simple check to see whether we think the view may have
-      // resized.  We could look for a number of cases, but for now we'll
-      // handle only one simple case:  if the width and height are both
-      // specified, and they have not changed.
-      previousWidth = previousLayout.width;
-      if (previousWidth !== undefined) {
-        currentWidth = currentLayout.width;
-        if (previousWidth === currentWidth) {
-          previousHeight = previousLayout.height;
-          if (previousLayout !== undefined) {
-            currentHeight = currentLayout.height;
-            if (previousHeight === currentHeight) didResize = NO;
-          }
-        }
-      }
-    }
-
-    this.beginPropertyChanges() ;
-    this.notifyPropertyChange('hasAcceleratedLayer');
-    this.notifyPropertyChange('layoutStyle') ;
     if (didResize) {
       this.viewDidResize();
-    }
-    else {
-      // Even if we didn't resize, our frame might have changed.
-      // viewDidResize() handles this in the other case.
+    } else {
+      // Even if we didn't resize, our frame may have changed
+      // TODO: consider checking for position changes by testing the resulting frame against the cached frame.  This is difficult to do.
       this._viewFrameDidChange();
     }
-    this.endPropertyChanges() ;
 
-    // notify layoutView...
-    var layoutView = this.get('layoutView');
-    if (layoutView) {
-      layoutView.set('childViewsNeedLayout', YES);
-      layoutView.layoutDidChangeFor(this) ;
-      if (layoutView.get('childViewsNeedLayout')) {
-        layoutView.invokeOnce(layoutView.layoutChildViewsIfNeeded);
-      }
-    }
-
+    // Cache the last layout to fine-tune notifications when the layout changes.
     this._previousLayout = currentLayout;
-
-    return this ;
   },
 
   /**
@@ -832,13 +868,13 @@ SC.View.reopen(
     views.  Normally this property is set automatically whenever the layout
     property for a child view changes.
 
-    @property {Boolean}
+    @type Boolean
   */
   childViewsNeedLayout: NO,
 
   /**
     One of two methods that are invoked whenever one of your childViews
-    layout changes.  This method is invoked everytime a child view's layout
+    layout changes.  This method is invoked every time a child view's layout
     changes to give you a chance to record the information about the view.
 
     Since this method may be called many times during a single run loop, you
@@ -855,8 +891,8 @@ SC.View.reopen(
     @param {SC.View} childView the view whose layout has changed.
     @returns {void}
   */
-  layoutDidChangeFor: function(childView) {
-    var set = this._needLayoutViews ;
+  layoutDidChangeFor: function (childView) {
+    var set = this._needLayoutViews;
     if (!set) set = this._needLayoutViews = SC.CoreSet.create();
     set.add(childView);
   },
@@ -865,17 +901,17 @@ SC.View.reopen(
     Called your layout method if the view currently needs to layout some
     child views.
 
-    @param {Boolean} isVisible if true assume view is visible even if it is not.
+    @param {Boolean} force if true assume view is visible even if it is not.
     @returns {SC.View} receiver
     @test in layoutChildViews
   */
-  layoutChildViewsIfNeeded: function(isVisible) {
-    if (!isVisible) isVisible = this.get('isVisibleInWindow');
-    if (isVisible && this.get('childViewsNeedLayout')) {
+  layoutChildViewsIfNeeded: function (force) {
+    if (this.get('childViewsNeedLayout')) {
       this.set('childViewsNeedLayout', NO);
-      this.layoutChildViews();
+      this.layoutChildViews(force);
     }
-    return this ;
+
+    return this;
   },
 
   /**
@@ -884,17 +920,19 @@ SC.View.reopen(
     own layout updating method if you want, though usually the better option
     is to override the layout method from the parent view.
 
-    The default implementation of this method simply calls the renderLayout()
+    The default implementation of this method simply calls the updateLayout()
     method on the views that need layout.
 
+    @param {Boolean} force Force the update to the layer's layout style immediately even if the view is not in a shown state.  Otherwise the style will be updated when the view returns to a shown state.
     @returns {void}
   */
-  layoutChildViews: function() {
+  layoutChildViews: function (force) {
     var set = this._needLayoutViews,
-        len = set ? set.length : 0,
-        i;
+      len = set ? set.length : 0,
+      i;
+
     for (i = 0; i < len; ++i) {
-      set[i].updateLayout();
+      set[i].updateLayout(force);
     }
     set.clear(); // reset & reuse
   },
@@ -908,22 +946,14 @@ SC.View.reopen(
     You will not usually override this method, but you may call it if you
     implement layoutChildViews() in a view yourself.
 
+    @param {Boolean} force Force the update to the layer's layout style immediately even if the view is not in a shown state.  Otherwise the style will be updated when the view returns to a shown state.
     @returns {SC.View} receiver
     @test in layoutChildViews
   */
-  updateLayout: function() {
-    var layer = this.get('layer'), context;
-    if (layer) {
-      context = this.renderContext(layer);
-      this.renderLayout(context, NO);
-      context.update();
+  updateLayout: function (force) {
+    this._doUpdateLayout(force);
 
-      // If this view uses static layout, then notify if the frame changed.
-      // (viewDidResize will do a comparison)
-      if (this.useStaticLayout) this.viewDidResize();
-    }
-    layer = null ;
-    return this ;
+    return this;
   },
 
   /**
@@ -936,25 +966,143 @@ SC.View.reopen(
     @returns {void}
     @test in layoutChildViews
   */
-  renderLayout: function(context, firstTime) {
-    this.get('layoutStyleCalculator').willRenderAnimations();
-    context.addStyle(this.get('layoutStyle'));
-    this.get('layoutStyleCalculator').didRenderAnimations();
+  renderLayout: function (context) {
+    context.setStyle(this.get('layoutStyle'));
   },
 
-  _renderLayerSettings: function(original, context, firstTime) {
-    original(context, firstTime);
-    this.renderLayout(context, firstTime);
-  }.enhance(),
-
-  applyAttributesToContext: function(original, context) {
+  applyAttributesToContext: function (original, context) {
     original(context);
 
+    // Have to pass 'true' for second argument for legacy.
+    this.renderLayout(context, true);
+
     if (this.get('useStaticLayout')) { context.addClass('sc-static-layout'); }
-    if (this.get('backgroundColor')) {
-      context.css('backgroundColor', this.get('backgroundColor'));
+
+    var backgroundColor = this.get('backgroundColor');
+    if (backgroundColor) {
+      context.setStyle('backgroundColor', backgroundColor);
     }
-  }.enhance()
+  }.enhance(),
+
+  /** @private Update this view's layout action. */
+  _doUpdateLayout: function (force) {
+    var isRendered = this.get('_isRendered'),
+      isVisibleInWindow = this.get('isVisibleInWindow'),
+      handled = true;
+
+    if (isRendered) {
+      if (isVisibleInWindow ||
+        force) {
+        // Only in the visible states do we allow updates without being forced.
+        this._executeDoUpdateLayout();
+      } else {
+        // Otherwise mark the view as needing an update when we enter a shown state again.
+        this._layoutNeedsUpdate = true;
+      }
+    } else {
+      handled = false;
+    }
+
+    return handled;
+  },
+
+  /** @private */
+  _executeDoUpdateLayout: function () {
+    var context;
+
+    context = this.renderContext(this.get('layer'));
+    context.setStyle(this.get('layoutStyle'));
+    context.update();
+
+    // Reset that an update is required.
+    this._layoutNeedsUpdate = false;
+
+    // Notify updated.
+    this._updatedLayout();
+  },
+
+  /** @private Override. */
+  _executeQueuedUpdates: function () {
+    sc_super();
+
+    // Update the layout style of the layer if necessary.
+    if (this._layoutNeedsUpdate) {
+      this._executeDoUpdateLayout();
+    }
+  },
+
+  /** @private Override: Notify on attached (avoids notify of frame changed). */
+  _notifyAttached: function () {
+    // If we are using static layout then we don't know the frame until appended to the document.
+    if (this.get('useStaticLayout')) {
+      // We call viewDidResize so that it calls parentViewDidResize on all child views.
+      this.viewDidResize();
+    }
+
+    // Notify.
+    if (this.didAppendToDocument) { this.didAppendToDocument(); }
+  },
+
+  /** @private Override: The 'adopted' event (uses _checkForResize so our childViews are notified if our frame changes). */
+  _adopted: function (beforeView) {
+    var parentView = this.get('parentView');
+
+    // Our frame may change once we've been adopted to a parent.
+    this._checkForResize();
+
+    if (!this.get('isAttached')) {
+
+      if (this.get('_isRendered')) {
+
+        // Bypass the unattached state for adopted views.
+        if (parentView.get('isAttached')) {
+          var parentNode, nextNode, nextView, siblings;
+
+          parentNode = parentView.get('containerLayer');
+          siblings = parentView.get('childViews');
+          nextView = siblings.objectAt(siblings.indexOf(this) + 1);
+          nextNode = (nextView) ? nextView.get('layer') : null;
+
+          this._doAttach(parentNode, nextNode);
+        }
+      } else {
+
+        // Bypass the unrendered state for adopted views.
+        if (parentView.get('_isRendered')) {
+          this._doRender();
+        }
+      }
+
+    }
+
+    // Notify.
+    if (parentView.didAddChild) { parentView.didAddChild(this, beforeView); }
+    if (this.didAddToParent) { this.didAddToParent(parentView, beforeView); }
+  },
+
+  /** @private Extension: The 'orphaned' event. */
+  _orphaned: function (oldParentView) {
+    sc_super();
+
+    // Our frame may change once we've been removed from a parent.
+    this._checkForResize();
+  },
+
+  /** @private Extension: The 'updatedContent' event. */
+  _updatedContent: function () {
+    sc_super();
+
+    // If this view uses static layout, then notify that the frame (likely)
+    // changed.
+    if (this.useStaticLayout) { this.viewDidResize(); }
+  },
+
+  /** @private The 'updatedLayout' event. */
+  _updatedLayout: function () {
+    // Notify.
+    this.didRenderAnimations();
+  }
+
 });
 
 SC.View.mixin(
@@ -963,7 +1111,7 @@ SC.View.mixin(
   /**
     Convert any layout to a Top, Left, Width, Height layout
   */
-  convertLayoutToAnchoredLayout: function(layout, parentFrame){
+  convertLayoutToAnchoredLayout: function (layout, parentFrame) {
     var ret = {top: 0, left: 0, width: parentFrame.width, height: parentFrame.height},
         pFW = parentFrame.width, pFH = parentFrame.height, //shortHand for parentDimensions
         lR = layout.right,
@@ -978,14 +1126,14 @@ SC.View.mixin(
     // X Conversion
     // handle left aligned and left/right
     if (!SC.none(lL)) {
-      if(SC.isPercentage(lL)) ret.left = lL*pFW;
+      if (SC.isPercentage(lL)) ret.left = lL * pFW;
       else ret.left = lL;
       if (lW !== undefined) {
-        if(lW === SC.LAYOUT_AUTO) ret.width = SC.LAYOUT_AUTO ;
-        else if(SC.isPercentage(lW)) ret.width = lW*pFW ;
-        else ret.width = lW ;
+        if (lW === SC.LAYOUT_AUTO) ret.width = SC.LAYOUT_AUTO;
+        else if (SC.isPercentage(lW)) ret.width = lW * pFW;
+        else ret.width = lW;
       } else {
-        if (lR && SC.isPercentage(lR)) ret.width = pFW - ret.left - (lR*pFW);
+        if (lR && SC.isPercentage(lR)) ret.width = pFW - ret.left - (lR * pFW);
         else ret.width = pFW - ret.left - (lR || 0);
       }
 
@@ -995,14 +1143,14 @@ SC.View.mixin(
       // if no width, calculate it from the parent frame
       if (SC.none(lW)) {
         ret.left = 0;
-        if(lR && SC.isPercentage(lR)) ret.width = pFW - (lR*pFW);
+        if (lR && SC.isPercentage(lR)) ret.width = pFW - (lR * pFW);
         else ret.width = pFW - (lR || 0);
 
       // If has width, calculate the left anchor from the width and right and parent frame
       } else {
-        if(lW === SC.LAYOUT_AUTO) ret.width = SC.LAYOUT_AUTO ;
+        if (lW === SC.LAYOUT_AUTO) ret.width = SC.LAYOUT_AUTO;
         else {
-          if (SC.isPercentage(lW)) ret.width = lW*pFW;
+          if (SC.isPercentage(lW)) ret.width = lW * pFW;
           else ret.width = lW;
           if (SC.isPercentage(lR)) ret.left = pFW - (ret.width + lR);
           else ret.left = pFW - (ret.width + lR);
@@ -1011,18 +1159,18 @@ SC.View.mixin(
 
     // handle centered
     } else if (!SC.none(lcX)) {
-      if(lW && SC.isPercentage(lW)) ret.width = (lW*pFW) ;
-      else ret.width = (lW || 0) ;
-      ret.left = ((pFW - ret.width)/2);
-      if (SC.isPercentage(lcX)) ret.left = ret.left + lcX*pFW;
+      if (lW && SC.isPercentage(lW)) ret.width = (lW * pFW);
+      else ret.width = (lW || 0);
+      ret.left = ((pFW - ret.width) / 2);
+      if (SC.isPercentage(lcX)) ret.left = ret.left + lcX * pFW;
       else ret.left = ret.left + lcX;
 
     // if width defined, assume left of zero
     } else if (!SC.none(lW)) {
       ret.left =  0;
-      if(lW === SC.LAYOUT_AUTO) ret.width = SC.LAYOUT_AUTO ;
+      if (lW === SC.LAYOUT_AUTO) ret.width = SC.LAYOUT_AUTO;
       else {
-        if(SC.isPercentage(lW)) ret.width = lW*pFW;
+        if (SC.isPercentage(lW)) ret.width = lW * pFW;
         else ret.width = lW;
       }
 
@@ -1033,21 +1181,21 @@ SC.View.mixin(
     }
 
     // handle min/max
-    if (layout.minWidth !== undefined) ret.minWidth = layout.minWidth ;
-    if (layout.maxWidth !== undefined) ret.maxWidth = layout.maxWidth ;
+    if (layout.minWidth !== undefined) ret.minWidth = layout.minWidth;
+    if (layout.maxWidth !== undefined) ret.maxWidth = layout.maxWidth;
 
     // Y Conversion
     // handle left aligned and top/bottom
     if (!SC.none(lT)) {
-      if(SC.isPercentage(lT)) ret.top = lT*pFH;
+      if (SC.isPercentage(lT)) ret.top = lT * pFH;
       else ret.top = lT;
       if (lH !== undefined) {
-        if(lH === SC.LAYOUT_AUTO) ret.height = SC.LAYOUT_AUTO ;
-        else if (SC.isPercentage(lH)) ret.height = lH*pFH;
-        else ret.height = lH ;
+        if (lH === SC.LAYOUT_AUTO) ret.height = SC.LAYOUT_AUTO;
+        else if (SC.isPercentage(lH)) ret.height = lH * pFH;
+        else ret.height = lH;
       } else {
         ret.height = pFH - ret.top;
-        if(lB && SC.isPercentage(lB)) ret.height = ret.height - (lB*pFH);
+        if (lB && SC.isPercentage(lB)) ret.height = ret.height - (lB * pFH);
         else ret.height = ret.height - (lB || 0);
       }
 
@@ -1057,34 +1205,34 @@ SC.View.mixin(
       // if no height, calculate it from the parent frame
       if (SC.none(lH)) {
         ret.top = 0;
-        if (lB && SC.isPercentage(lB)) ret.height = pFH - (lB*pFH);
+        if (lB && SC.isPercentage(lB)) ret.height = pFH - (lB * pFH);
         else ret.height = pFH - (lB || 0);
 
       // If has height, calculate the top anchor from the height and bottom and parent frame
       } else {
-        if(lH === SC.LAYOUT_AUTO) ret.height = SC.LAYOUT_AUTO ;
+        if (lH === SC.LAYOUT_AUTO) ret.height = SC.LAYOUT_AUTO;
         else {
-          if (SC.isPercentage(lH)) ret.height = lH*pFH;
+          if (SC.isPercentage(lH)) ret.height = lH * pFH;
           else ret.height = lH;
           ret.top = pFH - ret.height;
-          if (SC.isPercentage(lB)) ret.top = ret.top - (lB*pFH);
+          if (SC.isPercentage(lB)) ret.top = ret.top - (lB * pFH);
           else ret.top = ret.top - lB;
         }
       }
 
     // handle centered
     } else if (!SC.none(lcY)) {
-      if(lH && SC.isPercentage(lH)) ret.height = (lH*pFH) ;
-      else ret.height = (lH || 0) ;
-      ret.top = ((pFH - ret.height)/2);
-      if(SC.isPercentage(lcY)) ret.top = ret.top + lcY*pFH;
+      if (lH && SC.isPercentage(lH)) ret.height = (lH * pFH);
+      else ret.height = (lH || 0);
+      ret.top = ((pFH - ret.height) / 2);
+      if (SC.isPercentage(lcY)) ret.top = ret.top + lcY * pFH;
       else ret.top = ret.top + lcY;
 
     // if height defined, assume top of zero
     } else if (!SC.none(lH)) {
       ret.top =  0;
-      if(lH === SC.LAYOUT_AUTO) ret.height = SC.LAYOUT_AUTO ;
-      else if (SC.isPercentage(lH)) ret.height = lH*pFH;
+      if (lH === SC.LAYOUT_AUTO) ret.height = SC.LAYOUT_AUTO;
+      else if (SC.isPercentage(lH)) ret.height = lH * pFH;
       else ret.height = lH;
 
     // fallback, full height.
@@ -1093,16 +1241,16 @@ SC.View.mixin(
       ret.height = 0;
     }
 
-    if(ret.top) ret.top = Math.floor(ret.top);
-    if(ret.bottom) ret.bottom = Math.floor(ret.bottom);
-    if(ret.left) ret.left = Math.floor(ret.left);
-    if(ret.right) ret.right = Math.floor(ret.right);
-    if(ret.width !== SC.LAYOUT_AUTO) ret.width = Math.floor(ret.width);
-    if(ret.height !== SC.LAYOUT_AUTO) ret.height = Math.floor(ret.height);
+    if (ret.top) ret.top = Math.floor(ret.top);
+    if (ret.bottom) ret.bottom = Math.floor(ret.bottom);
+    if (ret.left) ret.left = Math.floor(ret.left);
+    if (ret.right) ret.right = Math.floor(ret.right);
+    if (ret.width !== SC.LAYOUT_AUTO) ret.width = Math.floor(ret.width);
+    if (ret.height !== SC.LAYOUT_AUTO) ret.height = Math.floor(ret.height);
 
     // handle min/max
-    if (layout.minHeight !== undefined) ret.minHeight = layout.minHeight ;
-    if (layout.maxHeight !== undefined) ret.maxHeight = layout.maxHeight ;
+    if (layout.minHeight !== undefined) ret.minHeight = layout.minHeight;
+    if (layout.maxHeight !== undefined) ret.maxHeight = layout.maxHeight;
 
     return ret;
   },
@@ -1110,7 +1258,7 @@ SC.View.mixin(
   /**
     For now can only convert Top/Left/Width/Height to a Custom Layout
   */
-  convertLayoutToCustomLayout: function(layout, layoutParams, parentFrame){
+  convertLayoutToCustomLayout: function (layout, layoutParams, parentFrame) {
     // TODO: [EG] Create Top/Left/Width/Height to a Custom Layout conversion
   }
 });

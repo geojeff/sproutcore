@@ -26,30 +26,41 @@ test("reopening and enhancing", function() {
 test("subclassing and then enhancing the parent", function() {
   var Klass = SC.Object.extend({
     loudly: function(string) {
-      return string + this.get('exclaim');
+      return string + this.get('exclaim'); // foo!
     },
     exclaim: "!"
   });
 
+  var obj = Klass.create();
+  equals(obj.loudly("foo"), "foo!");
+
   Klass.reopen({
     loudly: function(original, string) {
-      return original(string.toUpperCase());
+      return original(string.toUpperCase()); // FOO!
     }.enhance()
   });
+
+  obj = Klass.create();
+  equals(obj.loudly("foo"), "FOO!");
 
   SubKlass = Klass.extend({
     loudly: function(string) {
-      return "ZOMG " + sc_super();
+      return "ZOMG " + sc_super(); // ZOMG FOO!
     }
   });
 
+  obj = SubKlass.create();
+  equals(obj.loudly("foo"), "ZOMG FOO!");
+
   Klass.reopen({
     loudly: function(original, string) {
-      return "OHAI: " + original(string);
+      return "OHAI: " + original(string); // OHAI: FOO!
     }.enhance()
   });
 
-  var obj = SubKlass.create();
+  obj = Klass.create();
+  equals(obj.loudly("foo"), "OHAI: FOO!");
+  obj = SubKlass.create();
   equals(obj.loudly("foo"), "ZOMG OHAI: FOO!");
 });
 
@@ -130,7 +141,6 @@ test("sc_super to a non-method", function() {
 test("sc_super works in enhanced methods", function() {
   var Klass = SC.Object.extend({
     loudly: function(string) {
-      console.log(string);
       return string.toUpperCase();
     }
   });
@@ -195,32 +205,67 @@ test("enhance still works if there is no base method to enhance", function() {
   ok(enhanced.weirdName(), "enhanced function runs with no errors");
 });
 
-test("should invalidate a computed property added to a subclass via reopen() that depends on a key defined in original");
-
-// Enable the following once we fix this
-/*
-test("should invalidate a computed property added to a subclass via reopen() that depends on a key defined in original", function() {
+/**
+  There was a bug that defining a subclass prior to reopening the parent class
+  and adding a computed property, binding or observer to the parent, caused the
+  subclass not to register the property, binding or observer correctly.
+*/
+test("reopening a class that has been subclassed, updates the subclasses properties, bindings and observers", function() {
+  var propertyChanged = 0, observerCalled = 0;
+  MyBindable = SC.Object.create({ a: 1, b: 2 });
   var MyClass = SC.Object.extend({ property: function() { }.property() });
-  var MySubclass = MyClass.extend({ anotherProperty: function() { }.property() });
 
-  var observerCalled = 0;
+  // Define a subclass prior to the reopen().
+  var MySubclass = MyClass.extend({ anotherProperty: function() { return "My Own Property"; }.property(), c: 3 });
 
+  // Reopen and add a computed property, binding and observer to the parent class
   MyClass.reopen({
+    anotherProperty: function() {
+      return "Another Property";
+    }.property(),
     yetAnotherProperty: function() {
       return "Yet Another Property";
-    }.property('property')
+    }.property('property'),
+    a: 1,
+    aBinding: SC.Binding.oneWay("MyBindable.a"),
+    bObserver: function() {
+      observerCalled++;
+    }.observes('MyBindable.b'),
+    c: 4
+  });
+
+  // Define another subclass after the reopen().
+  var MyOtherSubclass = MyClass.extend({ stillOneOtherProperty: function() { }.property() });
+
+  // Create instances of each for comparison.
+  var myClass = MyClass.create();
+  myClass.addObserver('yetAnotherProperty', function() {
+    propertyChanged++;
   });
 
   var mySubclass = MySubclass.create();
-  mySubclass.addObserver('yetAnothesProperty', function() {
-    observerCalled++;
+  mySubclass.addObserver('yetAnotherProperty', function() {
+    propertyChanged++;
+  });
+
+  var myOtherSubclass = MyOtherSubclass.create();
+  myOtherSubclass.addObserver('yetAnotherProperty', function() {
+    propertyChanged++;
   });
 
   SC.run(function() {
+    myClass.set('property', "foo");
     mySubclass.set('property', "foo");
+    myOtherSubclass.set('property', "foo");
+    MyBindable.set('a', 2);
+    MyBindable.set('b', 3);
   });
 
-  equals(observerCalled, 1, "fires observer once");
+  equals(propertyChanged, 3, "property invalidated thrice");
+  equals(observerCalled, 3, "fires observer thrice");
+  equals(myClass.get('a'), 2, "myClass bound value should be 2");
+  equals(mySubclass.get('a'), 2, "mySubclass bound value should be 2");
+  equals(myOtherSubclass.get('a'), 2, "myOtherSubclass bound value should be 2");
+  equals(mySubclass.get('c'), 3, "mySubclass overridden property should still be set");
+  equals(mySubclass.get('anotherProperty'), "My Own Property", "mySubclass overridden computed property should still exist");
 });
-*/
-

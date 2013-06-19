@@ -248,7 +248,7 @@ SC.TreeItemObserver = SC.Object.extend(SC.Array, SC.CollectionContent, {
     // adjust the start location based on branches, possibly passing on to an
     // observer.
     if (this.get('isHeaderVisible')) cur--; // exclude my own header item
-    if (cur < 0) throw "Tree Item cannot replace itself";
+    if (cur < 0) throw new Error("Tree Item cannot replace itself");
 
     // remove branch lengths.  If the adjusted start location lands inside of
     // another branch, then just let that observer handle it.
@@ -260,7 +260,7 @@ SC.TreeItemObserver = SC.Object.extend(SC.Array, SC.CollectionContent, {
 
         // if this branch range is before the start loc, just remove it and
         // go on.  If cur is somewhere inside of the range, then save to pass
-        // on.  Note use of operation to determine the abiguous end op.
+        // on.  Note use of operation to determine the ambiguous end op.
         if ((i+len === cur) && operation === SC.DROP_AFTER) cur -= i;
         else if (i+len > cur) cur -= i; // put inside of nested range
         else {
@@ -295,10 +295,10 @@ SC.TreeItemObserver = SC.Object.extend(SC.Array, SC.CollectionContent, {
     // ok, now that we are adjusted, get the children and forward the replace
     // call on.  if there are no children, bad news...
     var children = this.get('children');
-    if (!children) throw "cannot replace() tree item with no children";
+    if (!children) throw new Error("cannot replace() tree item with no children");
 
     if ((amt < 0) || (max>children.get('length'))) {
-      throw "replace() range must lie within a single tree item";
+      throw new Error("replace() range must lie within a single tree item");
     }
 
     children.replace(cur, amt, objects, operation);
@@ -688,7 +688,7 @@ SC.TreeItemObserver = SC.Object.extend(SC.Array, SC.CollectionContent, {
     // begin all properties on item if there is one.  This will allow us to
     // track important property changes.
     var item = this.get('item');
-    if (!item) throw "SC.TreeItemObserver.item cannot be null";
+    if (!item) throw new Error("SC.TreeItemObserver.item cannot be null");
 
     item.addObserver('*', this, this._itemPropertyDidChange);
     this._itemPropertyDidChange(item, '*');
@@ -697,7 +697,7 @@ SC.TreeItemObserver = SC.Object.extend(SC.Array, SC.CollectionContent, {
 
   /**
     Called just before a branch observer is removed.  Should stop any
-    observering and invalidate any child observers.
+    observing and invalidate any child observers.
   */
   destroy: function() {
     this.invalidateBranchObserversAt(0);
@@ -779,7 +779,7 @@ SC.TreeItemObserver = SC.Object.extend(SC.Array, SC.CollectionContent, {
 
   /**
     Computes the current disclosure state of the item by asking the item or
-    the delegate.  If no pitem or index is passed, the parentItem and idex
+    the delegate.  If no pitem or index is passed, the parentItem and index
     will be used.
   */
   _computeDisclosureState: function(item, pitem, index) {

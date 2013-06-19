@@ -9,31 +9,26 @@
 SC.BaseTheme.imageButtonRenderDelegate = SC.RenderDelegate.create({
   className: 'image-button',
 
-  render: function(dataSource, context) {
+  render: function (dataSource, context) {
     var image = dataSource.get('image'),
-        toolTip = dataSource.get('toolTip');
-
-    // render controlSize
-    this.addSizeClassName(dataSource, context);
-
-    context.addClass('no-min-width');
+      toolTip = dataSource.get('toolTip');
 
     if (toolTip) {
-      context.attr('title', toolTip);
-      context.attr('alt', toolTip);
+      context.setAttr('title', toolTip);
+      context.setAttr('alt', toolTip);
     }
 
+
     if (image) {
-      context.push("<div class='img "+image+"'></div>");
-    } else {
-      context.push("<div class='img'></div>");
+      context.addClass(image);
+
+      // Track the image class used so that we can remove it when it changes.
+      dataSource.renderState._cachedImage = image;
     }
   },
 
-  update: function(dataSource, $) {
+  update: function (dataSource, $) {
     var image, toolTip;
-
-    this.updateSizeClassName(dataSource, $);
 
     if (dataSource.didChangeFor('imageButtonRenderDelegate', 'toolTip')) {
       toolTip = dataSource.get('toolTip');
@@ -45,7 +40,12 @@ SC.BaseTheme.imageButtonRenderDelegate = SC.RenderDelegate.create({
     if (dataSource.didChangeFor('imageButtonRenderDelegate', 'image')) {
       image = dataSource.get('image');
 
-      $.children()[0].className = 'img '+image;
+      // Remove the last image class and add the new one.
+      $.removeClass(dataSource.renderState._cachedImage);
+      $.addClass(image);
+
+      // Track the image class used so that we can remove it when it changes.
+      dataSource.renderState._cachedImage = image;
     }
   }
 });
