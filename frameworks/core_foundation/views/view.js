@@ -13,7 +13,7 @@ sc_require('system/responder');
 sc_require('system/theme');
 
 sc_require('system/string');
-sc_require('views/view/base');
+sc_require('views/view/statechart');
 
 
 /**
@@ -146,7 +146,7 @@ SC.CoreView.reopen(
       2. the view has a view ancestor with isVisible set to false.
 
     @type Boolean
-    @see SC.View#currentState
+    @see SC.View#viewState
     @default true
   */
   isVisible: true,
@@ -1083,7 +1083,7 @@ SC.CoreView.reopen(
 
     // If the view will transition out, wait for the transition to complete
     // before orphaning the view entirely.
-    if (!immediately && view.get('currentState') === SC.CoreView.ATTACHED_BUILDING_OUT) {
+    if (!immediately && view.get('viewState') === SC.CoreView.ATTACHED_BUILDING_OUT) {
       view.addObserver('isAttached', this, this._orphanChildView);
     } else {
       view._doOrphan();

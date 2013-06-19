@@ -61,15 +61,15 @@ SC.ButtonView = SC.View.extend(SC.Control,
 /** @scope SC.ButtonView.prototype */ {
 
   /**
-    Tied to the isEnabled state
+    Tied to the isEnabledInPane state
 
     @type Boolean
     @default YES
   */
   acceptsFirstResponder: function() {
-    if (SC.FOCUS_ALL_CONTROLS) { return this.get('isEnabled'); }
+    if (SC.FOCUS_ALL_CONTROLS) { return this.get('isEnabledInPane'); }
     return NO;
-  }.property('isEnabled'),
+  }.property('isEnabledInPane'),
 
   /**
     @type Array
@@ -402,7 +402,7 @@ SC.ButtonView = SC.View.extend(SC.Control,
   */
   triggerActionAfterDelay: function(evt) {
     // If this button is disabled, we have nothing to do
-    if (!this.get('isEnabled')) return NO;
+    if (!this.get('isEnabledInPane')) return NO;
 
     // Set active state of the button so it appears highlighted
     this.set('isActive', YES);
@@ -464,10 +464,6 @@ SC.ButtonView = SC.View.extend(SC.Control,
   */
   ariaRole: 'button',
 
-  // display properties that should automatically cause a refresh.
-  // isCancel and isDefault also cause a refresh but this is implemented as
-  // a separate observer (see below)
-
   /**
     The following properties affect how `SC.ButtonView` is rendered, and will
     cause the view to be rerendered if they change.
@@ -510,7 +506,7 @@ SC.ButtonView = SC.View.extend(SC.Control,
     //If this is not visible
     if (!this.get('isVisibleInWindow')) return NO;
 
-    if (!this.get('isEnabled')) return NO;
+    if (!this.get('isEnabledInPane')) return NO;
     var equiv = this.get('keyEquivalent');
 
     // button has defined a keyEquivalent and it matches!
@@ -642,7 +638,7 @@ SC.ButtonView = SC.View.extend(SC.Control,
   mouseDown: function(evt) {
     var buttonBehavior = this.get('buttonBehavior');
 
-    if (!this.get('isEnabled')) return YES ; // handled event, but do nothing
+    if (!this.get('isEnabledInPane')) return YES ; // handled event, but do nothing
     this.set('isActive', YES);
     this._isMouseDown = YES;
 
@@ -680,12 +676,12 @@ SC.ButtonView = SC.View.extend(SC.Control,
     ON mouse up, trigger the action only if we are enabled and the mouse was released inside of the view.
   */
   mouseUp: function(evt) {
-    if (this._isMouseDown) this.set('isActive', NO); // track independently in case isEnabled has changed
+    if (this._isMouseDown) this.set('isActive', NO); // track independently in case isEnabledInPane has changed
     this._isMouseDown = false;
 
     if (this.get('buttonBehavior') !== SC.HOLD_BEHAVIOR) {
       var inside = this.$().within(evt.target);
-      if (inside && this.get('isEnabled')) this._action(evt) ;
+      if (inside && this.get('isEnabledInPane')) this._action(evt) ;
     }
 
     return YES ;
@@ -695,7 +691,7 @@ SC.ButtonView = SC.View.extend(SC.Control,
   touchStart: function(touch){
     var buttonBehavior = this.get('buttonBehavior');
 
-    if (!this.get('isEnabled')) return YES ; // handled event, but do nothing
+    if (!this.get('isEnabledInPane')) return YES ; // handled event, but do nothing
     this.set('isActive', YES);
 
     if (buttonBehavior === SC.HOLD_BEHAVIOR) {
@@ -728,10 +724,10 @@ SC.ButtonView = SC.View.extend(SC.Control,
   /** @private */
   touchEnd: function(touch){
     this._touch_exited = NO;
-    this.set('isActive', NO); // track independently in case isEnabled has changed
+    this.set('isActive', NO); // track independently in case isEnabledInPane has changed
 
     if (this.get('buttonBehavior') !== SC.HOLD_BEHAVIOR) {
-      if (this.touchIsInBoundary(touch) && this.get('isEnabled')) {
+      if (this.touchIsInBoundary(touch) && this.get('isEnabledInPane')) {
         this._action();
       }
     }
@@ -743,7 +739,7 @@ SC.ButtonView = SC.View.extend(SC.Control,
   /** @private */
   keyDown: function(evt) {
     // handle tab key
-     if(!this.get('isEnabled')) return YES;
+     if(!this.get('isEnabledInPane')) return YES;
     if (evt.which === 9 || evt.keyCode === 9) {
       var view = evt.shiftKey ? this.get('previousValidKeyView') : this.get('nextValidKeyView');
       if(view) view.becomeFirstResponder();

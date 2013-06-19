@@ -36,47 +36,49 @@ sc_require('render_delegates/render_delegate');
 SC.BaseTheme.imageRenderDelegate = SC.RenderDelegate.create({
   className: 'image',
 
-  render: function(dataSource, context) {
+  render: function (dataSource, context) {
     var image = dataSource.get('image'),
-        imageValue = dataSource.get('imageValue'),
-        type = dataSource.get('type') || SC.IMAGE_TYPE_URL,
-        toolTip = dataSource.get('toolTip');
+      value = dataSource.get('value'),
+      type = dataSource.get('type') || SC.IMAGE_TYPE_URL,
+      toolTip = dataSource.get('toolTip');
 
-    // Leave the inner content empty while the type is unknown.
-    if (type !== SC.IMAGE_TYPE_NONE) {
-      // Place the img within a div, so that we may scale & offset the img
-      context = context.begin('img');
-      context.setAttr('src', image.src);
+    // Place the img within a div, so that we may scale & offset the img
+    context = context.begin('img');
+    context.setAttr('src', image.src);
 
-      if (imageValue && type === SC.IMAGE_TYPE_CSS_CLASS) {
-        context.addClass(imageValue);
-        this._last_class = imageValue;
-      }
-
-      if (toolTip) {
-        context.setAttr('title', toolTip);
-        context.setAttr('alt', toolTip);
-      }
-
-      // Adjust the layout of the img
-      context.addStyle(this.imageStyles(dataSource));
-
-      context = context.end();
+    // Support for CSS sprites (TODO: Remove this)
+    if (value && type === SC.IMAGE_TYPE_CSS_CLASS) {
+      context.addClass(value);
+      dataSource.renderState._last_class = value;
     }
+
+    if (toolTip) {
+      context.setAttr('title', toolTip);
+      context.setAttr('alt', toolTip);
+    }
+
+    // Adjust the layout of the img
+    context.addStyle(this.imageStyles(dataSource));
+
+    context = context.end();
   },
 
-  update: function(dataSource, jquery) {
+  update: function (dataSource, jquery) {
     var image = dataSource.get('image'),
-        imageValue = dataSource.get('imageValue'),
-        toolTip = dataSource.get('toolTip');
+      lastClass = dataSource.renderState._last_class,
+      value = dataSource.get('value'),
+      type = dataSource.get('type') || SC.IMAGE_TYPE_URL,
+      toolTip = dataSource.get('toolTip');
 
     jquery = jquery.find('img');
+
     jquery.attr('src', image.src);
 
-    if (imageValue !== this._last_class) jquery.removeClass(this._last_class);
-    if (imageValue) {
-      jquery.addClass(imageValue);
-      this._last_class = imageValue;
+    // Support for CSS sprites (TODO: Remove this)
+    if (lastClass) jquery.removeClass(lastClass);
+    if (value && type === SC.IMAGE_TYPE_CSS_CLASS) {
+      jquery.addClass(value);
+      dataSource.renderState._last_class = value;
     }
 
     if (toolTip) {
@@ -88,7 +90,7 @@ SC.BaseTheme.imageRenderDelegate = SC.RenderDelegate.create({
     jquery.css(this.imageStyles(dataSource));
   },
 
-  imageStyles: function(dataSource) {
+  imageStyles: function (dataSource) {
     var innerFrame = dataSource.get('innerFrame');
     return {
       'position': 'absolute',

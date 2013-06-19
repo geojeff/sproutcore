@@ -31,17 +31,6 @@ SC.ThumbView = SC.View.extend(
   */
   classNames: ['sc-thumb-view'],
 
-  /**
-    Enable this thumb view to control its parent split view.
-
-    @type Boolean
-    @default YES
-  */
-  isEnabled: YES,
-
-  /** @private */
-  isEnabledBindingDefault: SC.Binding.bool(),
-
   /** @private */
   render: function(context, firstTime) {
     var splitView = this.get('splitView') ;
@@ -51,7 +40,7 @@ SC.ThumbView = SC.View.extend(
 
   /** @private */
   mouseDown: function(evt) {
-    if (!this.get('isEnabled')) return NO ;
+    if (!this.get('isEnabledInPane')) return NO ;
 
     var splitView = this.get('splitView');
     return (splitView) ? splitView.mouseDownInThumbView(evt, this) : sc_super();

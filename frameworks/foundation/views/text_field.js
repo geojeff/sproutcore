@@ -352,7 +352,7 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
     This property indicates if the value in the text field can be changed.
     If set to `NO`, a `readOnly` attribute will be added to the DOM Element.
 
-    Note if `isEnabled` is `NO` this property will have no effect.
+    Note if `isEnabledInPane` is `NO` this property will have no effect.
 
     @type Boolean
     @default YES
@@ -471,7 +471,8 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
   // INTERNAL SUPPORT
   //
 
-  displayProperties: ['isBrowserFocusable','formattedHint', 'fieldValue', 'isEditing', 'isEditable', 'leftAccessoryView', 'rightAccessoryView', 'isTextArea'],
+  // Note: isEnabled is required here because it is used in the render function.
+  displayProperties: ['isBrowserFocusable','formattedHint', 'fieldValue', 'isEditing', 'isEditable', 'isEnabled', 'leftAccessoryView', 'rightAccessoryView', 'isTextArea'],
 
   createChildViews: function () {
     sc_super();
@@ -479,8 +480,8 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
   },
 
   acceptsFirstResponder: function () {
-    return this.get('isEnabled');
-  }.property('isEnabled'),
+    return this.get('isEnabledInPane');
+  }.property('isEnabledInPane'),
 
   accessoryViewObserver: function () {
     var classNames,
@@ -649,10 +650,11 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
         autocapitalizeString = ' autocapitalize=' + (!autoCapitalize ? '"off"' : '"true"');
       }
 
-      if (isBrowserFocusable) {
+      if (!isBrowserFocusable) {
         browserFocusable = 'tabindex="-1"';
       }
-        // if hint is on and we don't want it to show on focus, create one
+
+      // if hint is on and we don't want it to show on focus, create one
       if (SC.platform.input.placeholder && !hintOnFocus) {
         hintString = ' placeholder="' + hint + '"';
       }
@@ -1288,7 +1290,7 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
     var fieldValue = this.get('fieldValue'); // use 'fieldValue' since we want actual text
     this._txtFieldMouseDown=YES;
     this.becomeFirstResponder();
-    if (!this.get('isEnabled')) {
+    if (!this.get('isEnabledInPane')) {
       evt.stop();
       return YES;
     } else {
@@ -1303,7 +1305,7 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
     // processing.
     this.notifyPropertyChange('selection');
 
-    if (!this.get('isEnabled')) {
+    if (!this.get('isEnabledInPane')) {
       evt.stop();
       return YES;
     }

@@ -40,8 +40,6 @@ SC.View.reopen(
   */
   hasLayout: YES,
 
-  concatenatedProperties: ["layoutProperties"],
-
   /**
     Optional background color.  Will be applied to the view's element if
     set.  This property is intended for one-off views that need a background
@@ -994,10 +992,10 @@ SC.View.reopen(
       if (isVisibleInWindow ||
         force) {
         // Only in the visible states do we allow updates without being forced.
-        this._executeDoUpdateLayout();
+        this._doUpdateLayoutStyle();
       } else {
         // Otherwise mark the view as needing an update when we enter a shown state again.
-        this._layoutNeedsUpdate = true;
+        this._layoutStyleNeedsUpdate = true;
       }
     } else {
       handled = false;
@@ -1007,7 +1005,7 @@ SC.View.reopen(
   },
 
   /** @private */
-  _executeDoUpdateLayout: function () {
+  _doUpdateLayoutStyle: function () {
     var context;
 
     context = this.renderContext(this.get('layer'));
@@ -1015,21 +1013,21 @@ SC.View.reopen(
     context.update();
 
     // Reset that an update is required.
-    this._layoutNeedsUpdate = false;
+    this._layoutStyleNeedsUpdate = false;
 
     // Notify updated.
     this._updatedLayout();
   },
 
-  /** @private Override. */
-  _executeQueuedUpdates: function () {
-    sc_super();
+  /** @private Enhance. */
+  _executeQueuedUpdates: function (original) {
+    original();
 
     // Update the layout style of the layer if necessary.
-    if (this._layoutNeedsUpdate) {
-      this._executeDoUpdateLayout();
+    if (this._layoutStyleNeedsUpdate) {
+      this._doUpdateLayoutStyle();
     }
-  },
+  }.enhance(),
 
   /** @private Override: Notify on attached (avoids notify of frame changed). */
   _notifyAttached: function () {
@@ -1085,7 +1083,7 @@ SC.View.reopen(
     sc_super();
 
     // Our frame may change once we've been removed from a parent.
-    this._checkForResize();
+    if (!this.isDestroyed) { this._checkForResize(); }
   },
 
   /** @private Extension: The 'updatedContent' event. */
