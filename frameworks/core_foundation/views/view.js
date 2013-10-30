@@ -281,8 +281,20 @@ SC.CoreView.reopen(
     @returns {SC.View} receiver
   */
   displayDidChange: function () {
-    // Filter the input channel.
-    this.invokeOnce(this._doUpdateContent);
+    //@if (debug)
+    if (SC.LOG_VIEW_STATES) {
+      SC.Logger.log('%c%@:%@ — displayDidChange()'.fmt(this, this.get('viewState')), SC.LOG_VIEW_STATES_STYLE[this.get('viewState')]);
+    }
+    //@endif
+
+    // Don't run _doUpdateContent needlessly, because the view may render
+    // before it is invoked, which would result in a needless update.
+    if (this.get('_isRendered')) {
+      // Legacy.
+      this.set('layerNeedsUpdate', true);
+
+      this.invokeOnce(this._doUpdateContent);
+    }
 
     return this;
   },
@@ -1144,36 +1156,36 @@ SC.CoreView.reopen(
 
     // OPTIMIZATION!
     // If we know that we're removing all children and we are rendered, lets do the document cleanup in one sweep.
-    if (immediately && this.get('_isRendered')) {
-      var layer,
-        parentNode;
+    // if (immediately && this.get('_isRendered')) {
+    //   var layer,
+    //     parentNode;
 
-      // If attached, detach and track our parent node so we can re-attach.
-      if (this.get('isAttached')) {
-        layer = this.get('layer');
-        parentNode = layer.parentNode;
+    //   // If attached, detach and track our parent node so we can re-attach.
+    //   if (this.get('isAttached')) {
+    //     layer = this.get('layer');
+    //     parentNode = layer.parentNode;
 
-        this._doDetach();
-      }
+    //     this._doDetach();
+    //   }
 
-      // Destroy our layer and thus all the children's layers in one move.
-      this.destroyLayer();
+    //   // Destroy our layer and thus all the children's layers in one move.
+    //   this.destroyLayer();
 
-      // Remove all the children.
+    //   // Remove all the children.
+    //   for (i = len - 1; i >= 0; i--) {
+    //     this.removeChildAndDestroy(childViews.objectAt(i), immediately);
+    //   }
+
+    //   // Recreate our layer (now empty).
+    //   this.createLayer();
+
+    //   // Reattach our layer.
+    //   if (parentNode && !this.get('isAttached')) { this._doAttach(parentNode); }
+    // } else {
       for (i = len - 1; i >= 0; i--) {
         this.removeChildAndDestroy(childViews.objectAt(i), immediately);
       }
-
-      // Recreate our layer (now empty).
-      this.createLayer();
-
-      // Reattach our layer.
-      if (parentNode && !this.get('isAttached')) { this._doAttach(parentNode); }
-    } else {
-      for (i = len - 1; i >= 0; i--) {
-        this.removeChildAndDestroy(childViews.objectAt(i), immediately);
-      }
-    }
+    // }
 
     return this;
   },
@@ -1432,16 +1444,16 @@ SC.CoreView.reopen(
     There are a number of pre-built transition plugins available in the
     foundation framework:
 
-      SC.View.BOUNCE
-      SC.View.FADE
-      SC.View.SLIDE
-      SC.View.SCALE
-      SC.View.SPRING
+      SC.View.BOUNCE_IN
+      SC.View.FADE_IN
+      SC.View.SLIDE_IN
+      SC.View.SCALE_IN
+      SC.View.SPRING_IN
 
     You can even provide your own custom transition plugins.  Just create a
-    transition object that conforms to the SC.TransitionProtocol protocol.
+    transition object that conforms to the SC.ViewTransitionProtocol protocol.
 
-    @type Object (SC.TransitionProtocol)
+    @type Object (SC.ViewTransitionProtocol)
     @default null
     @since Version 1.10
   */
@@ -1480,16 +1492,16 @@ SC.CoreView.reopen(
     There are a number of pre-built transition plugins available in the
     foundation framework:
 
-      SC.View.BOUNCE
-      SC.View.FADE
-      SC.View.SLIDE
-      SC.View.SCALE
-      SC.View.SPRING
+      SC.View.BOUNCE_OUT
+      SC.View.FADE_OUT
+      SC.View.SLIDE_OUT
+      SC.View.SCALE_OUT
+      SC.View.SPRING_OUT
 
     You can even provide your own custom transition plugins.  Just create a
-    transition object that conforms to the SC.TransitionProtocol protocol.
+    transition object that conforms to the SC.ViewTransitionProtocol protocol.
 
-    @type Object (SC.TransitionProtocol)
+    @type Object (SC.ViewTransitionProtocol)
     @default null
     @since Version 1.10
   */
@@ -1529,16 +1541,16 @@ SC.CoreView.reopen(
     There are a number of pre-built transition plugins available in the
     foundation framework:
 
-      SC.View.BOUNCE
-      SC.View.FADE
-      SC.View.SLIDE
-      SC.View.SCALE
-      SC.View.SPRING
+      SC.View.BOUNCE_IN
+      SC.View.FADE_IN
+      SC.View.SLIDE_IN
+      SC.View.SCALE_IN
+      SC.View.SPRING_IN
 
     You can even provide your own custom transition plugins.  Just create a
-    transition object that conforms to the SC.TransitionProtocol protocol.
+    transition object that conforms to the SC.ViewTransitionProtocol protocol.
 
-    @type Object (SC.TransitionProtocol)
+    @type Object (SC.ViewTransitionProtocol)
     @default null
     @since Version 1.10
   */
@@ -1577,16 +1589,16 @@ SC.CoreView.reopen(
     There are a number of pre-built transition plugins available in the
     foundation framework:
 
-      SC.View.BOUNCE
-      SC.View.FADE
-      SC.View.SLIDE
-      SC.View.SCALE
-      SC.View.SPRING
+      SC.View.BOUNCE_OUT
+      SC.View.FADE_OUT
+      SC.View.SLIDE_OUT
+      SC.View.SCALE_OUT
+      SC.View.SPRING_OUT
 
     You can even provide your own custom transition plugins.  Just create a
-    transition object that conforms to the SC.TransitionProtocol protocol.
+    transition object that conforms to the SC.ViewTransitionProtocol protocol.
 
-    @type Object (SC.TransitionProtocol)
+    @type Object (SC.ViewTransitionProtocol)
     @default null
     @since Version 1.10
   */
@@ -1869,6 +1881,10 @@ SC.CoreView.unload = function () {
    - `render` -- override this method to generate or update your HTML to reflect
      the current state of your view.  This method is called both when your view
      is first created and later anytime it needs to be updated.
+   - `update` -- Normally, when a view needs to update its content, it will
+     re-render the view using the render() method.  If you would like to
+     override this behavior with your own custom updating code, you can
+     replace update() with your own implementation instead.
    - `didCreateLayer` -- the render() method is used to generate new HTML.
      Override this method to perform any additional setup on the DOM you might
      need to do after creating the view.  For example, if you need to listen
@@ -1876,10 +1892,6 @@ SC.CoreView.unload = function () {
    - `willDestroyLayer` -- if you implement didCreateLayer() to setup event
      listeners, you should implement this method as well to remove the same
      just before the DOM for your view is destroyed.
-   - `updateLayer` -- Normally, when a view needs to update its content, it will
-     re-render the view using the render() method.  If you would like to
-     override this behavior with your own custom updating code, you can
-     replace updateLayer() with your own implementation instead.
    - `didAppendToDocument` -- in theory all DOM setup could be done
      in didCreateLayer() as you already have a DOM element instantiated.
      However there is cases where the element has to be first appended to the
@@ -1887,6 +1899,9 @@ SC.CoreView.unload = function () {
      plugins which objects are not instantiated until you actually append the
      element to the DOM. This will allow you to do things like registering
      DOM events on flash or quicktime objects.
+   - `willRemoveFromDocument` -- This method is called on the view immediately
+     before its layer is removed from the DOM. You can use this to reverse any
+     setup that is performed in `didAppendToDocument`.
 
   @extends SC.Responder
   @extends SC.DelegateSupport

@@ -120,7 +120,7 @@ SC._object_extend = function _object_extend(base, ext, proto) {
     // get the value.  use concats if defined
     value = (concats.hasOwnProperty(key) ? concats[key] : null) || ext[key];
 
-    // Possibly add to a bindings.
+    // Possibly add to bindings.
     if (key.length > 7 && key.slice(-7) === "Binding") {
       if (!clonedBindings) {
         bindings = (bindings || SC.EMPTY_ARRAY).slice();
@@ -990,8 +990,7 @@ SC.mixin(SC.Object.prototype, SC.Observable);
   through all the top-level properties looking for classes.  When it finds
   one, it saves the class path name.
 */
-function findClassNames() {
-
+SC.findClassNames = function () {
   if (SC._object_foundObjectClassNames) return;
   SC._object_foundObjectClassNames = true;
 
@@ -1093,7 +1092,7 @@ SC.kindOf = function (scObject, scClass) {
 */
 SC._object_className = function (obj) {
   if (SC.isReady === NO) return ''; // class names are not available until ready
-  if (!obj._object_className) findClassNames();
+  if (!obj._object_className) SC.findClassNames();
   if (obj._object_className) return obj._object_className;
 
   // if no direct classname was found, walk up class chain looking for a

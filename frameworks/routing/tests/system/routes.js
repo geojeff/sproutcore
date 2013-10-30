@@ -35,7 +35,9 @@ module('SC.routes setup', {
 });
 
 test('Setup', function() {
-  equals(SC.routes._didSetup, YES, 'SC.routes should have been setup');
+  SC.run(function() {
+    equals(SC.routes._didSetup, YES, 'SC.routes should have been setup');
+  });
 });
 
 test('Initial route', function() {
@@ -146,6 +148,49 @@ test('UTF-8 route', function() {
 
 test('Already escaped route', function() {
   routeWorks('%C3%A9%C3%A0%20%C3%A7%C3%B9%20%C3%9F%E2%82%AC', 'already escaped');
+});
+
+module('SC.routes informLocation', {
+
+  teardown: function() {
+    SC.routes.set('informLocation', null);
+  }
+
+});
+
+test('informLocation updates location', function() {
+  SC.routes.set('informLocation', 'simple');
+  stop();
+
+  setTimeout(function() {
+    equals(SC.routes.get('location'), 'simple');
+    start();
+  }, 300);
+});
+
+test('informLocation and location invalidate each others caches', function() {
+  SC.routes.set('location', '');
+  stop();
+
+  setTimeout(function() {
+    equals(SC.routes.get('location'), '');
+    SC.routes.set('informLocation', 'simple');
+
+    setTimeout(function() {
+      equals(SC.routes.get('location'), 'simple');
+      SC.routes.set('location', '');
+
+      setTimeout(function() {
+        equals(SC.routes.get('location'), '');
+        SC.routes.set('informLocation', 'simple');
+
+        setTimeout(function() {
+          equals(SC.routes.get('location'), 'simple');
+          start();
+        }, 300);
+      }, 300);
+    }, 300);
+  }, 300);
 });
 
 module('SC.routes defined routes', {

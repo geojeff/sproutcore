@@ -43,12 +43,14 @@ config :desktop,         :required => [:foundation]
 config :media,           :required => [:desktop]
 config :statechart,      :required => [:core_foundation], :test_required => [:core_foundation, :desktop, :routing]
 config :ajax,            :required => [:runtime, :core_foundation]
-config :designer,        :required => [:runtime, :foundation, :desktop]
+config :designer,        :required => [:runtime, :foundation, :desktop, :template_view]
 
 config :"experimental/split_view", :test_required => [:desktop]
 
 # WRAPPER FRAMEWORKS
-config :sproutcore, :required => [:desktop, :datastore, :statechart]
+config :sproutcore,
+  :required => [:desktop, :datastore, :statechart],
+  :exclude => ['phantomjs']
 
 config :qunit, :required => []
 config :testing, :required => [:jquery], :test_required => [], :debug_required => []
@@ -87,24 +89,22 @@ config :ace,
 
 # CONFIGURE APPS
 config :core_tools, :required => [
-  :desktop, :datastore, "sproutcore/experimental/forms",
-  "sproutcore/ace",
-
-  # The SC apps will use the experimental version of these controls:
-  "sproutcore/experimental/select_view",
-  "sproutcore/experimental/split_view"
+  :desktop,
+  :datastore
 ]
 
 # mode :debug do
 #   config :core_tools, :combine_javascript => false
 # end
 
-%w(tests welcome).each do |app_target|
-  config app_target,
-    :required => [:desktop, :datastore, :core_tools],
-    :theme => :ace
+config :welcome,
+  :required => [:core_tools],
+  :theme => :ace
 
-  # mode :debug do
-  #   config app_target, :combine_javascript => false
-  # end
-end
+config :tests,
+  :required => [:statechart, :core_tools],
+  :theme => :ace
+
+# mode :debug do
+#   config app_target, :combine_javascript => false
+# end

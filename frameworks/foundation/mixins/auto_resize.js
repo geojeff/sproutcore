@@ -156,12 +156,14 @@ SC.AutoResize = {
   */
   measuredSizeDidChange: function() {
     var measuredSize = this.get('measuredSize'),
-    calculatedWidth = measuredSize.width, calculatedHeight = measuredSize.height,
-    paddingHeight, paddingWidth,
-    autoResizePadding = this.get('autoResizePadding') || 0,
-    maxWidth = this.get('maxWidth'), maxHeight = this.get('maxHeight');
+      calculatedWidth = measuredSize.width,
+      calculatedHeight = measuredSize.height,
+      paddingHeight, paddingWidth,
+      autoResizePadding = this.get('autoResizePadding') || 0,
+      maxWidth = this.get('maxWidth'),
+      maxHeight = this.get('maxHeight');
 
-    if(SC.typeOf(autoResizePadding) === SC.T_NUMBER) {
+    if (SC.typeOf(autoResizePadding) === SC.T_NUMBER) {
       paddingHeight = paddingWidth = autoResizePadding;
     } else {
       paddingHeight = autoResizePadding.height;
@@ -171,13 +173,14 @@ SC.AutoResize = {
     calculatedHeight += paddingHeight;
     calculatedWidth += paddingWidth;
 
-    if(this.get('shouldAutoResize')) {
+    if (this.get('shouldAutoResize')) {
       // if we are allowed to autoresize, adjust the layout
       if (this.get('shouldResizeWidth')) {
         if (maxWidth && calculatedWidth > maxWidth) {
           calculatedWidth = maxWidth;
         }
         this.set('calculatedWidth', calculatedWidth);
+
         this.adjust('width', calculatedWidth);
       }
 
@@ -190,7 +193,7 @@ SC.AutoResize = {
       }
     }
 
-  }.observes('shouldAutoResize', 'measuredSize', 'autoResizePadding', 'maxWidth', 'minWidth', 'shouldResizeWidth', 'shouldResizeHeight'),
+  }.observes('shouldAutoResize', 'measuredSize', 'autoResizePadding', 'maxWidth', 'maxHeight', 'shouldResizeWidth', 'shouldResizeHeight'),
 
   /**
     @private
@@ -253,7 +256,7 @@ SC.AutoResize = {
         cachedMetrics = this.get('_cachedMetrics'),
         maxFontSize = this.get('maxFontSize');
 
-    if(!layer) return;
+    if (!layer) return;
 
     // There are three special cases.
     //   - size is cached: the cached size is used with no measurement
@@ -452,7 +455,28 @@ SC.AutoResize = {
     orig();
 
     this.scheduleMeasurement();
+  }.enhance(),
+
+  /** @private
+    If the view has a transitionIn property, we have to delay the transition
+    setup and execution until after we measure.  In order to prevent a brief
+    flash of the view, we ensure it is hidden while it is being measured and
+    adjusted.
+
+    TODO: consider making the measurement state a formal SC.View state
+  */
+  _transitionIn: function (original) {
+    // In order to allow views to measure and adjust themselves on append, we
+    // can't transition until after the measurement is done.
+    var preTransitionOpacity = this.get('layout').opacity || 1;
+
+    this.adjust('opacity', 0);
+    this.invokeNext(function () {
+      this.adjust('opacity', preTransitionOpacity);
+      original();
+    });
   }.enhance()
+
 };
 
 /**

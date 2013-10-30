@@ -4,6 +4,7 @@
 //            Portions ©2008-2011 Apple Inc. All rights reserved.
 // License:   Licensed under MIT license (see license.js)
 // ==========================================================================
+/*global jQuery*/
 
 /**
   A constant indicating an unsupported method, property or other.
@@ -56,6 +57,10 @@ SC.platform = SC.Object.create({
        touch capability.
      - See: https://github.com/highslide-software/highcharts.com/issues/1331 for a discussion
        about why we need to check if ontouchstart is null in addition to check if it's defined
+     - The test for window._phantom provides support for phantomjs, the headless WebKit browser
+       used in Travis-CI, and which incorredtly (see above) identifies itself as a touch browser.
+       For more information on CI see https://github.com/sproutcore/sproutcore/pull/1025
+       For discussion of the phantomjs touch issue see https://github.com/ariya/phantomjs/issues/10375
   */
   /**
     YES if the current device supports touch events, NO otherwise.
@@ -63,9 +68,17 @@ SC.platform = SC.Object.create({
     You can simulate touch events in environments that don't support them by
     calling SC.platform.simulateTouchEvents() from your browser's console.
 
+    Note! The support for "touch" is a browser property and can't be relied on
+    to determine if the device is actually a "touch" device or if the device
+    actually uses touch events.  There are instances where "touch" devices will
+    not send touch events or will send touch and mouse events together and
+    there are instances where "non-touch" devices will support touch events.
+
+    It is recommended that you do not use this property at this time.
+
     @type Boolean
   */
-  touch: !SC.none(window.ontouchstart) || SC.browser.name === SC.BROWSER.android,
+  touch: (!SC.none(window.ontouchstart) || SC.browser.name === SC.BROWSER.android || 'ontouchstart' in document.documentElement) && SC.none(window._phantom),
 
   /**
     YES if the current browser supports bounce on scroll.
@@ -488,7 +501,7 @@ SC.platform = SC.Object.create({
   // Set up and execute the transition event test.
   if (SC.platform.supportsCSSTransitions) {
     var transitionEl = document.createElement('div'),
-      transitionStyleName = SC.browser.experimentalStyleNameFor('transition');
+      transitionStyleName = SC.browser.experimentalStyleNameFor('transition', 'all 1ms linear');
 
     transitionEl.style[transitionStyleName] = 'all 1ms linear';
 
@@ -515,15 +528,19 @@ SC.platform = SC.Object.create({
   // Set up and execute the animation event test.
   if (SC.platform.supportsCSSAnimations) {
     var animationEl = document.createElement('div'),
-      animationStyleName = SC.browser.experimentalStyleNameFor('animation'),
-      keyframeprefix = animationStyleName === 'animation' ? '' : SC.browser.cssPrefix,
-      keyframes = '@' + keyframeprefix + 'keyframes _sc_animation_test { from { opacity: 1; } to { opacity: 0; } }';
+      keyframes,
+      prefixedKeyframes;
 
-    // Add a test animation style.
-    animationEl.innerHTML = '<style>' + keyframes + '</style>';
+    // Generate both the regular and prefixed version of the style.
+    keyframes = '@keyframes _sc_animation_test { from { opacity: 1; } to { opacity: 0; } }';
+    prefixedKeyframes = '@' + SC.browser.cssPrefix + 'keyframes _sc_prefixed_animation_test { from { opacity: 1; } to { opacity: 0; } }';
+
+    // Add test animation styles.
+    animationEl.innerHTML = '<style>' + keyframes + '\n' + prefixedKeyframes + '</style>';
 
     // Set up and execute the animation event test.
-    animationEl.style[animationStyleName] = '_sc_animation_test 1ms linear';
+    animationEl.style.animation = '_sc_animation_test 1ms linear';
+    animationEl.style[SC.browser.domPrefix + 'Animation'] = '_sc_prefixed_animation_test 5ms linear';
 
     // NOTE: We could test start, but it's extra work and easier just to test the end
     // and infer the start event name from it.  Keeping this code for example.

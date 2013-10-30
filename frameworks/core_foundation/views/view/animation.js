@@ -83,6 +83,21 @@ SC.LayoutState = {
 SC.View.reopen(
   /** @scope SC.View.prototype */ {
 
+  /* @private Internal variable to store the active (i.e. applied) animations. */
+  _activeAnimations: null,
+
+  /* @private Internal variable to store the count of active animations. */
+  _activeAnimationsLength: null,
+
+  /* @private Internal variable to store the animation layout until the next run loop when it can be safely applied. */
+  _animateLayout: null,
+
+  /* @private Internal variable to store the pending (i.e. not yet applied) animations. */
+  _pendingAnimations: null,
+
+  /* @private Internal variable to store the previous layout for in case the animation is cancelled and meant to return to original point. */
+  _prevLayout: null,
+
   /**
     Method protocol.
 
@@ -111,7 +126,7 @@ SC.View.reopen(
     at least the duration property and optionally the timing and delay
     properties.  The options properties are as follows:
 
-    - duration: The duration of the transition in seconds.
+    - duration: The duration of the transition in seconds.  The default value is 0.25.
 
     - timing: The transition timing function.  This may be a predefined CSS timing
       function (e.g. 'linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out') or
@@ -125,7 +140,7 @@ SC.View.reopen(
       ** 'ease-in-out' - Specifies a transition effect with a slow start and end (equivalent to cubic-bezier(0.42,0,0.58,1))
       ** 'cubic-bezier(n,n,n,n)' - Define your own values in the cubic-bezier function. Possible values are numeric values from 0 to 1
 
-    - delay: The transition delay in seconds.
+    - delay: The transition delay in seconds.  The default value is 0.
 
     For example,
 
@@ -214,7 +229,7 @@ SC.View.reopen(
 
     @param {Object|String} properties Hash of property names with new layout values or a single property name.
     @param {Number} [value] The new layout value for a single property (only provide if the first parameter is a String).
-    @param {Object} options Hash of transition options.
+    @param {Number|Object} Duration or hash of transition options.
     @param {Object} [target=this] The target for the method.
     @param {AnimateCallback|String} [method] The method to run when the transition completes.  May be a function or a property path.
     @returns {SC.View} receiver
@@ -229,13 +244,14 @@ SC.View.reopen(
       timing;
 
     //@if(debug)
-    // Provide a little developer support if they are doing something that should be considered wrong.
+    // Provide a little developer support if they are doing something that may not work.
     if (this.get('useStaticLayout')) {
       SC.warn("Developer Warning: SC.View:animate() was called on a view with useStaticLayout and may not work.  If you are using CSS to layout the view (i.e. useStaticLayout: YES), then you should manage the animation manually.");
     }
     //@endif
 
     // Normalize arguments
+    // TODO: Revisit .animate() arguments re: overloading.
     if (typeof key === SC.T_STRING) {
       hash = {};
       hash[key] = value;
@@ -247,23 +263,13 @@ SC.View.reopen(
     }
 
     optionsType = SC.typeOf(options);
-    // This support should be deprecated.  Too much argument overloading.
     if (optionsType === SC.T_NUMBER) {
-      //@if(debug)
-      // Provide a little developer support if they are doing something that should be considered wrong.
-      SC.warn("Developer Warning: The duration should be given as a property of the options object.");
-      //@endif
       options = { duration: options };
     } else if (optionsType !== SC.T_HASH) {
       throw new Error("Must provide options hash!");
     }
 
-    // This support should be deprecated.  Too much argument overloading.
     if (options.callback) {
-      //@if(debug)
-      // Provide a little developer support if they are doing something that should be considered wrong.
-      SC.warn("Developer Warning: The callback method should be given as an argument not as part of the options object.");
-      //@endif
       method = options.callback;
       delete options.callback;
     }
@@ -285,10 +291,6 @@ SC.View.reopen(
 
     // In the case of zero duration, just adjust and call the callback.
     if (options.duration === 0) {
-      //@if(debug)
-      // Provide a little developer support if they are doing something that should be considered wrong.
-      SC.warn("Developer Warning: SC.View:animate() was called with a duration of 0 seconds.  The view will be adjusted and the callback will fire immediately in the next run loop.");
-      //@endif
       this.adjust(hash);
       this.runAnimationCallback(options, null, NO);
       return this;
@@ -358,17 +360,31 @@ SC.View.reopen(
         this.runAnimationCallback(curAnim, null, YES);
       }
 
-      if (cur !== value) {
+      if (cur !== value || optionsDidChange) {
         valueDidChange = YES;
         layout[property] = value;
-      }
 
-      // Always update the animate hash to the newest options which may have been altered before this was applied.
-      pendingAnimations[property] = options;
+        // Always update the animate hash to the newest options which may have been altered before this was applied.
+        pendingAnimations[property] = options;
+      }
     }
 
     // Only animate to new values.
     if (valueDidChange) {
+      // When animating height or width with centerX or centerY, we need to animate the margin property also to get a smooth change.
+      if (!SC.none(pendingAnimations.height) && !SC.none(layout.centerY) && SC.none(pendingAnimations.centerY)) {
+        // Don't animate less than 2px difference b/c the margin-top value won't differ.
+        if (Math.abs(hash.height - this.get('layout').height) >= 2) {
+          pendingAnimations.centerY = options;
+        }
+      }
+      if (!SC.none(pendingAnimations.width) && !SC.none(layout.centerX) && SC.none(pendingAnimations.centerX)) {
+        // Don't animate less than 2px difference b/c the margin-left value won't differ.
+        if (Math.abs(hash.width - this.get('layout').width) >= 2) {
+          pendingAnimations.centerX = options;
+        }
+      }
+
       this._animateLayout = layout;
 
       // Always run the animation asynchronously so that the original layout is guaranteed to be applied to the DOM.
@@ -392,7 +408,7 @@ SC.View.reopen(
       this.set('layout', this._animateLayout);
 
       // Clear the layout cache value.
-      delete this._animateLayout;
+      this._animateLayout = null;
     }
   },
 
@@ -465,6 +481,7 @@ SC.View.reopen(
       layout = this.get('liveAdjustments');
       break;
     default:
+      layout = this._animateLayout;
     }
 
     // Immediately remove the pending animations while calling the callbacks.
@@ -500,9 +517,7 @@ SC.View.reopen(
     }
 
     // Clean up.
-    delete this._prevLayout;
-    delete this._activeAnimations;
-    delete this._pendingAnimations;
+    this._prevLayout = this._activeAnimations = this._pendingAnimations = this._animateLayout = null;
 
     return this;
   },
@@ -576,8 +591,8 @@ SC.View.reopen(
             if (matrix.m11 < 0) ret.scale = ret.scale * -1;
 
             // Retrieve translateX & translateY
-            if (matrix.m14 > 0) { ret.left = matrix.m14; }
-            if (matrix.m24 > 0) { ret.top = matrix.m24; }
+            if (matrix.e > 0) { ret.left = matrix.e; }
+            if (matrix.f > 0) { ret.top = matrix.f; }
           } else {
             matrix = matrix.match(/^matrix\((.*)\)$/)[1].split(/,\s*/);
             if (matrix) {
@@ -595,11 +610,11 @@ SC.View.reopen(
   }.property(),
 
   /** @private Removes the animation CSS from the layer style. */
-  removeAnimationFromLayout: function (propertyName, updateStyle) {
+  removeAnimationFromLayout: function (propertyName, shouldUpdateStyle) {
     var activeAnimations = this._activeAnimations,
       layer = this.get('layer');
 
-    if (!!layer && updateStyle) {
+    if (!!layer && shouldUpdateStyle) {
       var updatedCSS = [];
 
       // Calculate the transition CSS that should remain.
@@ -650,7 +665,12 @@ SC.View.reopen(
   transitionDidEnd: function (evt) {
     var propertyName = evt.originalEvent.propertyName,
       activeAnimations = this._activeAnimations,
-      animation = activeAnimations ? activeAnimations[propertyName] : null;
+      animation;
+
+    // Fix up the centerX & centerY properties.
+    if (propertyName === 'margin-left') { propertyName = 'centerX'; }
+    if (propertyName === 'margin-top') { propertyName = 'centerY'; }
+    animation = activeAnimations ? activeAnimations[propertyName] : null;
 
     if (animation) {
       // Update the animation hash.  Do this first, so callbacks can check for active animations.
@@ -665,8 +685,7 @@ SC.View.reopen(
       // Clean up the internal hash.
       this._activeAnimationsLength -= 1;
       if (this._activeAnimationsLength === 0) {
-        delete this._activeAnimations;
-        delete this._prevLayout;
+        this._activeAnimations = this._prevLayout = null;
       }
     }
   },

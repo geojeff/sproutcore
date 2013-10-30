@@ -1166,13 +1166,14 @@ SC.ScrollView = SC.View.extend({
         needsScrollEnd = NO,
         contentWidth = 0,
         contentHeight = 0,
+        existingTouch = this.touch,
         viewFrame,
         view;
 
-    if (this.touch && this.touch.timeout) {
-      // clear the timeout
-      clearTimeout(this.touch.timeout);
-      this.touch.timeout = null;
+    if (existingTouch && !SC.none(existingTouch.animationID)) {
+      // If a deceleration calculation is queued to run, we need to cancel it so
+      // it doesn't run after we begin touch tracking again.
+      window.cancelAnimationFrame(existingTouch.animationID);
 
       // get the scroll offsets
       startClipOffsetX = this.touch.startClipOffset.x;
@@ -1295,6 +1296,7 @@ SC.ScrollView = SC.View.extend({
   /** @private */
   touchesDragged: function (evt) {
     var avg = evt.averagedTouchesForView(this);
+
     this.updateTouchScroll(avg.x, avg.y, avg.d, evt.timeStamp);
   },
 
@@ -1484,7 +1486,7 @@ SC.ScrollView = SC.View.extend({
     var touchStatus = this.touch;
 
     // if we are decelerating, we don't want to stop that. That would be bad. Because there's no point.
-    if (!touchStatus || !touchStatus.timeout) {
+    if (!touchStatus || !touchStatus.animationID) {
       this.beginPropertyChanges();
       this.set("scale", this._scale);
       this.set("verticalScrollOffset", this._scroll_verticalScrollOffset);
@@ -1509,9 +1511,9 @@ SC.ScrollView = SC.View.extend({
       y: touch.scrollVelocity.y * 10
     };
 
-      window.requestAnimationFrame(function(){
-          self.decelerateAnimation();
-      });
+    touch.animationID = window.requestAnimationFrame(function () {
+      self.decelerateAnimation();
+    });
   },
 
   /** @private
@@ -1547,7 +1549,7 @@ SC.ScrollView = SC.View.extend({
     return velocity;
   },
 
-  /** @private */
+  /** @private Decelerates the scrolling smoothly. */
   decelerateAnimation: function () {
     // get a bunch of properties. They are named well, so not much explanation of what they are...
     // However, note maxOffsetX/Y takes into account the scale;
@@ -1689,8 +1691,8 @@ SC.ScrollView = SC.View.extend({
     var absXVelocity = Math.abs(touch.decelerationVelocity.x),
         absYVelocity = Math.abs(touch.decelerationVelocity.y);
     if (absYVelocity < 0.05 && absXVelocity < 0.05 && Math.abs(sv) < 0.05) {
-      // we can reset the timeout, as it will no longer be required, and we don't want to re-cancel it later.
-      touch.timeout = null;
+      // We can reset the animation id, as it will no longer be required, and we don't want to accidentally try to cancel it later.
+      touch.animationID = null;
       this.touch = null;
 
       // trigger scroll end
@@ -1698,11 +1700,13 @@ SC.ScrollView = SC.View.extend({
 
       // set the scale, vertical, and horizontal offsets to what they technically already are,
       // but don't know they are yet. This will finally update things like, say, the clipping frame.
-      this.beginPropertyChanges();
-      this.set("scale", this._scale);
-      this.set("verticalScrollOffset", this._scroll_verticalScrollOffset);
-      this.set("horizontalScrollOffset", this._scroll_horizontalScrollOffset);
-      this.endPropertyChanges();
+      SC.run(function () {
+        this.beginPropertyChanges();
+        this.set("scale", this._scale);
+        this.set("verticalScrollOffset", this._scroll_verticalScrollOffset);
+        this.set("horizontalScrollOffset", this._scroll_horizontalScrollOffset);
+        this.endPropertyChanges();
+      }, this);
 
       return;
     }
@@ -1710,13 +1714,15 @@ SC.ScrollView = SC.View.extend({
     // We now set up the next round. We are doing this as raw as we possibly can, not touching the
     // run loop at all. This speeds up performance drastically--keep in mind, we're on comparatively
     // slow devices, here. So, we'll just make a closure, saving "this" into "self" and calling
-    // 10ms later (or however long it takes). Note also that we save both the last event time
-    // (so we may calculate elapsed time) and the timeout we are creating, so we may cancel it in future.
+    // 10ms later (or however long it takes).
+
+    // Note also that we save both the last event time (so we may calculate elapsed time) and the animation
+    // id we are creating, so we may cancel it in future.
     var self = this;
     touch.lastEventTime = Date.now();
-      window.requestAnimationFrame(function(){
-          SC.run(self.decelerateAnimation(), self);
-      });
+    touch.animationID = window.requestAnimationFrame(function () {
+      self.decelerateAnimation();
+    });
   },
 
   // ..........................................................
@@ -1791,6 +1797,9 @@ SC.ScrollView = SC.View.extend({
     }
 
     if (this.get('isVisibleInWindow')) this._scsv_registerAutoscroll();
+
+    // Initialize cache values.
+    this._scroll_contentWidth = this._scroll_contentHeight = null;
   },
 
   /** @private
@@ -1862,7 +1871,7 @@ SC.ScrollView = SC.View.extend({
     size of the contentView changes.  We don't care about the origin since
     that is tracked separately from the offset values.
   */
-  contentViewFrameDidChange: function(force) {
+  contentViewFrameDidChange: function (force) {
     var view   = this.get('contentView'),
         f      = (view) ? view.get('frame') : null,
         scale  = this._scale,
@@ -1929,7 +1938,11 @@ SC.ScrollView = SC.View.extend({
         forceHeight = mxVOffSet < vOffSet,
         forceWidth  = mxHOffSet < hOffSet;
     if (forceHeight || forceWidth) {
+      // Update the position of the content view to fit.
       this.forceDimensionsRecalculation(forceWidth, forceHeight, vOffSet, hOffSet);
+    } else {
+      // Reapply the position. Most importantly, this reapplies the touch transforms on the content view in case they were overwritten.
+      this.invokeLast(this.adjustElementScroll);
     }
 
     // send change notifications since they don't invalidate automatically
@@ -1993,7 +2006,8 @@ SC.ScrollView = SC.View.extend({
         this._applyCSSTransforms(content.get('layer'));
       }
 
-      if (content._viewFrameDidChange) { content._viewFrameDidChange(); }
+      // Notify the child that its frame is changing.
+      content.notifyPropertyChange('frame');
     }
 
     if (container && !SC.platform.touch) {

@@ -40,6 +40,42 @@ sc_require('system/query');
 SC.Record = SC.Object.extend(
 /** @scope SC.Record.prototype */ {
 
+  //@if(debug)
+  /* BEGIN DEBUG ONLY PROPERTIES AND METHODS */
+  /** @private
+    Creates string representation of record, with status.
+
+    @returns {String}
+  */
+
+  toString: function() {
+    // We won't use 'readOnlyAttributes' here because accessing them directly
+    // avoids a SC.clone() -- we'll be careful not to edit anything.
+    var attrs = this.get('store').readDataHash(this.get('storeKey'));
+    return "%@(%@) %@".fmt(this.constructor.toString(), SC.inspect(attrs), this.statusString());
+  },
+
+  /** @private
+    Creates string representation of record, with status.
+
+    @returns {String}
+  */
+
+  statusString: function() {
+    var ret = [], status = this.get('status');
+
+    for(var prop in SC.Record) {
+      if(prop.match(/[A-Z_]$/) && SC.Record[prop]===status) {
+        ret.push(prop);
+      }
+    }
+
+    return ret.join(" ");
+  },
+
+  /* END DEBUG ONLY PROPERTIES AND METHODS */
+  //@endif
+
   /**
     Walk like a duck
 
@@ -449,8 +485,8 @@ SC.Record = SC.Object.extend(
 
       // If the key is the primaryKey of the record, we need to tell the store
       // about the change.
-      if (key===this.get('primaryKey')) {
-        SC.Store.replaceIdFor(storeKey, value) ;
+      if (key === this.get('primaryKey')) {
+        SC.Store.replaceIdFor(storeKey, value);
         this.propertyDidChange('id'); // Reset computed value
       }
 
@@ -812,37 +848,6 @@ SC.Record = SC.Object.extend(
       return this;
     }
     return sc_super();
-  },
-
-  /** @private
-    Creates string representation of record, with status.
-
-    @returns {String}
-  */
-
-  toString: function() {
-    // We won't use 'readOnlyAttributes' here because accessing them directly
-    // avoids a SC.clone() -- we'll be careful not to edit anything.
-    var attrs = this.get('store').readDataHash(this.get('storeKey'));
-    return "%@(%@) %@".fmt(this.constructor.toString(), SC.inspect(attrs), this.statusString());
-  },
-
-  /** @private
-    Creates string representation of record, with status.
-
-    @returns {String}
-  */
-
-  statusString: function() {
-    var ret = [], status = this.get('status');
-
-    for(var prop in SC.Record) {
-      if(prop.match(/[A-Z_]$/) && SC.Record[prop]===status) {
-        ret.push(prop);
-      }
-    }
-
-    return ret.join(" ");
   },
 
   /**
@@ -1501,4 +1506,4 @@ SC.Record.mixin( /** @scope SC.Record */ {
     if(SC.Query) SC.Query._scq_didDefineRecordType(ret);
     return ret ;
   }
-}) ;
+});

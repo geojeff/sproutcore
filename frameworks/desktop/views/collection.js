@@ -132,6 +132,7 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
   /**
     The current length of the content.
 
+    @readonly
     @type Number
     @default 0
   */
@@ -816,7 +817,7 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
 
   /**
     Called whenever the content length changes.  This will invalidate the
-    length property of the view itself causing the nowShowing to recompute
+    length property of the view itself causing the `nowShowing` to recompute
     which will in turn update the UI accordingly.
 
     @returns {void}
@@ -824,7 +825,7 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
   contentLengthDidChange: function () {
     var content = this.get('content');
     this.set('length', content ? content.get('length') : 0);
-    this.invokeOnce('adjustLayout');
+    this.invokeOnce(this.adjustLayout);
   },
 
   /** @private
@@ -956,15 +957,15 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
       invalid.forEach(function (idx) {
         // Get the existing item view, if there is one.
         existing = itemViews[idx];
-          if (existing) {
+        if (existing) {
           // Exists so remove it (may send to pool).
-        this._removeItemView(existing, idx);
-      }
+          this._removeItemView(existing, idx);
+        }
 
         // Create it (may fetch from pool).
         if (nowShowing.contains(idx)) {
           this.itemViewForContentIndex(idx, YES);
-      }
+        }
       }, this);
 
     // if set is NOT defined, replace entire content with nowShowing
@@ -2290,26 +2291,26 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
     // var itemView = this.itemViewForEvent(touch),
     var itemView = this._touchSelectedView,
         contentIndex = itemView ? itemView.get('contentIndex') : -1,
-        isSelected = NO, sel;
+        isSelected = NO, sel, shouldSelect;
 
     if (!this.get('isEnabledInPane')) return contentIndex > -1;
-
-    // Remove fake selection in case our contentIndex is -1, a select event will add it back
-    if (itemView) { itemView.set('isSelected', NO); }
 
     if (contentIndex > -1) {
       if (this.get('useToggleSelection')) {
         sel = this.get('selection');
         isSelected = sel && sel.containsObject(itemView.get('content'));
+        shouldSelect = !isSelected;
       }
+      else
+        shouldSelect = true;
 
-      if (isSelected) {
-        this.deselect(contentIndex);
-      } else {
+      if (shouldSelect) {
         this.select(contentIndex, NO);
 
         // If actOnSelect is implemented, the action will be fired.
         this._cv_performSelectAction(itemView, touch, 0);
+      } else {
+        this.deselect(contentIndex);
       }
     }
 
@@ -2479,9 +2480,6 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
         // should essentially contain any visible drag items.
         dragView = del.collectionViewDragViewFor(this, dragContent.indexes);
         if (!dragView) dragView = this._cv_dragViewFor(dragContent.indexes);
-
-        // Make sure the dragView has created its layer.
-        dragView.createLayer();
 
         // Initiate the drag
         SC.Drag.start({
@@ -2785,7 +2783,7 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
     Implements the SC.DropTarget protocol.  Hides any visible insertion
     point and clears some cached values.
   */
-  dragExited: function () {
+  dragEnded: function () {
     this.hideInsertionPoint();
     this._lastInsertionIndex = this._lastDropOperation = null;
   },
@@ -2938,6 +2936,9 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
     };
   },
 
+  /* @private Internal property used to track the rate of touch scroll change events. */
+  _lastTouchScrollTime: null,
+
   /** @private SC.ScrollView */
   touchScrollDidChange: function (left, top) {
     // Fast path!  Don't try to update too soon.
@@ -2951,8 +2952,11 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
 
     // Indicate that nowShowing should be re-computed (this will use the
     // in-scroll clipping frame when it does).
+    // TODO: perform a raw update that doesn't require the run loop.
+    SC.run(function () {
     this.notifyPropertyChange('nowShowing');
     this.invokeOnce('_cv_nowShowingDidChange');
+    }, this);
 
     // Track the last time we updated.
     this._lastTouchScrollTime = Date.now();
@@ -3049,7 +3053,7 @@ SC.CollectionView = SC.View.extend(SC.CollectionViewDelegate, SC.CollectionConte
     //@if(debug)
     if (this.willReload || this.didReload) {
       // Deprecation warning for willReload and didReload.  These don't seem to serve any purpose.
-      SC.warn("Developer Warning: SC.CollectionView no longer calls willReload and didReload on its subclasses because it includes item view and layer pooling in itself by default.")
+      SC.warn("Developer Warning: SC.CollectionView no longer calls willReload and didReload on its subclasses because it includes item view and layer pooling in itself by default.");
     }
     //@endif
 

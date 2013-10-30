@@ -32,6 +32,7 @@ SC.ANCHOR_CENTER = { centerX: 0, centerY: 0 };
 
 SC.LAYOUT_AUTO = 'auto';
 
+
 SC.View.reopen(
   /** @scope SC.View.prototype */ {
 
@@ -50,6 +51,9 @@ SC.View.reopen(
   */
   backgroundColor: null,
 
+  /* @private Internal variable used to check for layout changes that resize. */
+  _previousLayout: null,
+
   /**
     Activates use of brower's static layout. To activate, set this
     property to YES.
@@ -67,6 +71,25 @@ SC.View.reopen(
     original();
 
     this._previousLayout = this.get('layout');
+
+    // Apply the automatic child view layout if it is defined.
+    var childViewLayout = this.childViewLayout;
+    if (childViewLayout) {
+      // Layout the child views once.
+      this.set('childViewsNeedLayout', true);
+      this.layoutChildViewsIfNeeded();
+
+      // If the child view layout is live, start observing affecting properties.
+      if (this.get('isChildViewLayoutLive')) {
+        this.addObserver('childViews.[]', this, this._cvl_childViewsDidChange);
+        // DISABLED. this.addObserver('childViewLayout', this, this._cvl_childViewLayoutDidChange);
+        this.addObserver('childViewLayoutOptions', this, this._cvl_childViewLayoutDidChange);
+
+        // Initialize the child views.
+        this._cvl_setupChildViewsLiveLayout();
+      }
+    }
+
   }.enhance(),
 
   /** @private */
@@ -123,18 +146,47 @@ SC.View.reopen(
     @returns {SC.View} receiver
   */
   adjust: function (key, value) {
-    var layout = this.get('layout'), didChange = NO, cur, hash;
-
     if (key === undefined) { return this; } // nothing to do.
 
-    // handle string case
+    var layout = this.get('layout'),
+        didChange = NO,
+        animateLayout = this._animateLayout,
+        cur, hash;
+
+    // Normalize arguments.
     if (SC.typeOf(key) === SC.T_STRING) {
-      // this is copied from below
+      hash = {};
+      hash[key] = value;
+    } else {
+      hash = key;
+    }
+
+    for (key in hash) {
+      if (!hash.hasOwnProperty(key)) { continue; }
+
+      value = hash[key];
       cur = layout[key];
 
-      if (value === undefined || cur == value) return this;
+      // If a call to animate occurs in the same run loop, the animation layout
+      // would still be applied in the next run loop, potentially overriding this
+      // adjustment. So we need to fix up the animation layout.
+      if (animateLayout) {
+        if (value === null) {
+          delete animateLayout[key];
+        } else {
+          animateLayout[key] = value;
+        }
 
-      layout = SC.clone(layout);
+        if (this._pendingAnimations[key]) {
+          // Adjusting a value that was previously about to be animated cancels the animation.
+          delete this._pendingAnimations[key];
+        }
+      }
+
+      if (value === undefined || cur == value) { continue; }
+
+      // only clone the layout the first time we see a change
+      if (!didChange) layout = SC.clone(layout);
 
       if (value === null) {
         delete layout[key];
@@ -143,36 +195,34 @@ SC.View.reopen(
       }
 
       didChange = YES;
-    } else {
-      hash = key;
-
-      for (key in hash) {
-        if (!hash.hasOwnProperty(key)) { continue; }
-
-        value = hash[key];
-        cur = layout[key];
-
-        if (value === undefined || cur == value) { continue; }
-
-        // only clone the layout the first time we see a change
-        if (!didChange) layout = SC.clone(layout);
-
-        if (value === null) {
-          delete layout[key];
-        } else {
-          layout[key] = value;
-        }
-
-        didChange = YES;
-      }
     }
 
     // now set adjusted layout
     if (didChange) {
-      this.set('layout', layout);
+      var transitionAdjust = this.get('transitionAdjust');
+
+      if (this.get('viewState') & SC.CoreView.IS_SHOWN && transitionAdjust) {
+        // Run the adjust transition.
+        this._transitionAdjust(layout);
+      } else {
+        this.set('layout', layout);
+      }
     }
 
     return this;
+  },
+
+  /** @private Attempts to run a transition adjust, ensuring any showing transitions are stopped in place. */
+  _transitionAdjust: function (layout) {
+    var transitionAdjust = this.get('transitionAdjust'),
+      options = this.get('transitionAdjustOptions') || {};
+
+    // Execute the adjusting transition.
+    transitionAdjust.run(this, options, layout);
+  },
+
+  /** @private */
+  didTransitionAdjust: function () {
   },
 
   /**
@@ -236,13 +286,24 @@ SC.View.reopen(
   */
   isFixedPosition: function () {
     var layout = this.get('layout'),
-        ret;
+      hasLeft,
+      hasTop,
+      ret;
 
     // Position is fixed if it has left + top !== SC.LAYOUT_AUTO
-    ret = (
-      ((layout.left !== undefined) && (layout.top !== undefined)) &&
-      ((layout.left !== SC.LAYOUT_AUTO) && (layout.top !== SC.LAYOUT_AUTO))
-    );
+    hasLeft = layout.left !== undefined;
+    if (!hasLeft) {
+      // Check for implied left. If there is a width, then there can't be a right or centerX.
+      hasLeft =  layout.width === undefined || (layout.width !== undefined && layout.right === undefined && layout.centerX === undefined);
+    }
+
+    hasTop = layout.top !== undefined;
+    if (!hasTop) {
+      // Check for implied top. If there is a height, then there can't be a bottom or centerY.
+      hasTop = layout.height === undefined || (layout.height !== undefined && layout.bottom === undefined && layout.centerY === undefined);
+    }
+
+    ret = (hasLeft && hasTop && layout.left !== SC.LAYOUT_AUTO && layout.top !== SC.LAYOUT_AUTO);
 
     // The position may appear fixed, but only if none of the values are percentages.
     if (ret) {
@@ -660,7 +721,7 @@ SC.View.reopen(
     // If this view uses static layout, our "do we think the frame changed?"
     // result of isFixedLayout is not applicable and we simply have to assume
     // that the frame may have changed.
-    sizeMayHaveChanged = this.useStaticLayout || !this.get('isFixedSize');
+    sizeMayHaveChanged = this.get('useStaticLayout') || !this.get('isFixedSize');
     positionMayHaveChanged = !this.get('isFixedPosition');
 
     if (sizeMayHaveChanged) {
@@ -789,7 +850,7 @@ SC.View.reopen(
     @returns {SC.View} receiver
   */
   layoutDidChange: function () {
-    var currentLayout  = this.get('layout');
+    var currentLayout = this.get('layout');
 
     // Handle old style rotation.
     if (!SC.none(currentLayout.rotate)) {
@@ -805,7 +866,7 @@ SC.View.reopen(
     // Optimize notifications depending on if we resized or just moved.
     this._checkForResize();
 
-    // Notify layoutView/parentView.
+    // Notify layoutView/parentView, unless we are transitioning.
     var layoutView = this.get('layoutView');
     if (layoutView) {
       layoutView.set('childViewsNeedLayout', YES);
@@ -891,6 +952,8 @@ SC.View.reopen(
   */
   layoutDidChangeFor: function (childView) {
     var set = this._needLayoutViews;
+
+    // Track this view.
     if (!set) set = this._needLayoutViews = SC.CoreSet.create();
     set.add(childView);
   },
@@ -905,8 +968,9 @@ SC.View.reopen(
   */
   layoutChildViewsIfNeeded: function (force) {
     if (this.get('childViewsNeedLayout')) {
-      this.set('childViewsNeedLayout', NO);
       this.layoutChildViews(force);
+
+      this.set('childViewsNeedLayout', NO);
     }
 
     return this;
@@ -925,14 +989,83 @@ SC.View.reopen(
     @returns {void}
   */
   layoutChildViews: function (force) {
-    var set = this._needLayoutViews,
-      len = set ? set.length : 0,
-      i;
+    var childViewLayout = this.childViewLayout,
+      set, len, i;
 
-    for (i = 0; i < len; ++i) {
-      set[i].updateLayout(force);
+    // Allow the child view layout plugin to layout all child views.
+    if (childViewLayout) {
+      // Adjust all other child views right now.
+      // Note: this will add the affected child views to the set so they will be updated only once in this run loop
+      childViewLayout.layoutChildViews(this);
     }
-    set.clear(); // reset & reuse
+
+    // Retreive these values after they may have been updated by adjustments by
+    // the childViewLayout plugin.
+    set = this._needLayoutViews;
+    if (set) {
+      for (i = 0, len = set.length; i < len; ++i) {
+        set[i].updateLayout(force);
+      }
+
+      set.clear(); // reset & reuse
+    }
+  },
+
+  /** @private Called when the child view layout plugin or options change. */
+  _cvl_childViewLayoutDidChange: function () {
+    this.set('childViewsNeedLayout', true);
+
+    // Filter the input channel.
+    this.invokeOnce(this.layoutChildViewsIfNeeded);
+  },
+
+  /** @private Called when the child views change. */
+  _cvl_childViewsDidChange: function () {
+    this._cvl_teardownChildViewsLiveLayout();
+    this._cvl_setupChildViewsLiveLayout();
+
+    this.set('childViewsNeedLayout', true);
+
+    // Filter the input channel.
+    this.invokeOnce(this.layoutChildViewsIfNeeded);
+  },
+
+  /** @private Add observers to the child views for automatic child view layout. */
+  _cvl_setupChildViewsLiveLayout: function () {
+    var childViewLayout = this.childViewLayout,
+      childViews,
+      childLayoutProperties = childViewLayout.childLayoutProperties || [];
+
+    // Create a reference to the current child views so that we can clean them if they change.
+    childViews = this._cvl_childViews = this.get('childViews');
+    for (var i = 0, len = childLayoutProperties.length; i < len; i++) {
+      var observedProperty = childLayoutProperties[i];
+
+      for (var j = 0, jlen = childViews.get('length'); j < jlen; j++) {
+        var childView = childViews.objectAt(j);
+        if (!childView.get('useAbsoluteLayout') && !childView.get('useStaticLayout')) {
+          childView.addObserver(observedProperty, this, this._cvl_childViewLayoutDidChange);
+        }
+      }
+    }
+  },
+
+  /** @private Remove observers from the child views for automatic child view layout. */
+  _cvl_teardownChildViewsLiveLayout: function () {
+    var childViewLayout = this.childViewLayout,
+      childViews = this._cvl_childViews || [],
+      childLayoutProperties = childViewLayout.childLayoutProperties || [];
+
+    for (var i = 0, len = childLayoutProperties.length; i < len; i++) {
+      var observedProperty = childLayoutProperties[i];
+
+      for (var j = 0, jlen = childViews.get('length'); j < jlen; j++) {
+        var childView = childViews.objectAt(j);
+        if (!childView.get('useAbsoluteLayout') && !childView.get('useStaticLayout')) {
+          childView.removeObserver(observedProperty, this, this._cvl_childViewLayoutDidChange);
+        }
+      }
+    }
   },
 
   /**
@@ -982,6 +1115,83 @@ SC.View.reopen(
     }
   }.enhance(),
 
+  // ------------------------------------------------------------------------
+  // Child View Layouts
+  //
+
+  /**
+    The child view layout plugin to use when laying out child views.
+
+    You can set this property to a child layout plugin object to
+    automatically set and adjust the layouts of this view's child views
+    according to some specific layout style.  For instance, SproutCore includes
+    two such plugins, SC.View.VERTICAL_STACK and SC.View.HORIZONTAL_STACK.
+
+    SC.View.VERTICAL_STACK will arrange child views in order in a vertical
+    stack, which only requires that the height of each child view be specified.
+    Likewise, SC.View.HORIZONTAL_STACK does the same in the horizontal
+    direction, which requires that the width of each child view be specified.
+
+    Where child layout plugins are extremely useful, besides simplifying
+    the amount of layout code you need to write, is that they can update the
+    layouts automatically as things change.  For more details and examples,
+    please see the documentation for SC.View.VERTICAL_STACK and
+    SC.View.HORIZONTAL_STACK.
+
+    To define your own child view layout plugin, simply create an object that
+    conforms to the SC.ChildViewLayoutProtocol protocol.
+
+    **Note** This should only be set once and is not bindable.
+
+    @type Object
+    @default null
+   */
+  childViewLayout: null,
+
+  /**
+    The options for the given child view layout plugin.
+
+    These options are specific to the current child layout plugin being used and
+    are used to modify the applied layouts.  For example, SC.View.VERTICAL_STACK
+    accepts options like:
+
+        childViewLayoutOptions: {
+          paddingAfter: 20,
+          paddingBefore: 20,
+          spacing: 10
+        }
+
+    To determine what options may be used for a given plugin and to see what the
+    default options are, please refer to the documentation for the child layout
+    plugin being used.
+
+    @type Object
+    @default null
+  */
+  childViewLayoutOptions: null,
+
+  /**
+    Whether the view and its child views should be monitored for changes that
+    affect the current child view layout.
+
+    When `true` and using a childViewLayout plugin, the view and its child views
+    will be observed for any changes that would affect the layout of all the
+    child views.  For example, if `isChildViewLayout` is true and using
+    SC.View.VERTICAL_STACK, if any child view's height or visibility changes
+    all of the child views will be re-adjusted.
+
+    If you only want to automatically layout the child views once, you can
+    set this to `false` to improve performance.
+
+    @type Boolean
+    @default true
+  */
+  isChildViewLayoutLive: true,
+
+  // ------------------------------------------------------------------------
+  // Statechart
+  //
+
   /** @private Update this view's layout action. */
   _doUpdateLayout: function (force) {
     var isRendered = this.get('_isRendered'),
@@ -989,8 +1199,7 @@ SC.View.reopen(
       handled = true;
 
     if (isRendered) {
-      if (isVisibleInWindow ||
-        force) {
+      if (isVisibleInWindow || force) {
         // Only in the visible states do we allow updates without being forced.
         this._doUpdateLayoutStyle();
       } else {
@@ -1030,7 +1239,7 @@ SC.View.reopen(
   }.enhance(),
 
   /** @private Override: Notify on attached (avoids notify of frame changed). */
-  _notifyAttached: function () {
+  _notifyDidAttach: function () {
     // If we are using static layout then we don't know the frame until appended to the document.
     if (this.get('useStaticLayout')) {
       // We call viewDidResize so that it calls parentViewDidResize on all child views.
@@ -1043,39 +1252,8 @@ SC.View.reopen(
 
   /** @private Override: The 'adopted' event (uses _checkForResize so our childViews are notified if our frame changes). */
   _adopted: function (beforeView) {
-    var parentView = this.get('parentView');
-
     // Our frame may change once we've been adopted to a parent.
     this._checkForResize();
-
-    if (!this.get('isAttached')) {
-
-      if (this.get('_isRendered')) {
-
-        // Bypass the unattached state for adopted views.
-        if (parentView.get('isAttached')) {
-          var parentNode, nextNode, nextView, siblings;
-
-          parentNode = parentView.get('containerLayer');
-          siblings = parentView.get('childViews');
-          nextView = siblings.objectAt(siblings.indexOf(this) + 1);
-          nextNode = (nextView) ? nextView.get('layer') : null;
-
-          this._doAttach(parentNode, nextNode);
-        }
-      } else {
-
-        // Bypass the unrendered state for adopted views.
-        if (parentView.get('_isRendered')) {
-          this._doRender();
-        }
-      }
-
-    }
-
-    // Notify.
-    if (parentView.didAddChild) { parentView.didAddChild(this, beforeView); }
-    if (this.didAddToParent) { this.didAddToParent(parentView, beforeView); }
   },
 
   /** @private Extension: The 'orphaned' event. */
@@ -1092,14 +1270,71 @@ SC.View.reopen(
 
     // If this view uses static layout, then notify that the frame (likely)
     // changed.
-    if (this.useStaticLayout) { this.viewDidResize(); }
+    if (this.get('useStaticLayout')) { this.viewDidResize(); }
   },
 
   /** @private The 'updatedLayout' event. */
   _updatedLayout: function () {
     // Notify.
     this.didRenderAnimations();
-  }
+  },
+
+  // ------------------------------------------------------------------------
+  // Transitions
+  //
+
+  /**
+    The transition plugin to use when this view is moved or resized by adjusting
+    its layout.
+
+    SC.CoreView uses a pluggable transition architecture where the transition
+    setup, execution and cleanup can be handled by a plugin.  This allows you
+    to create complex transition animations and share them across all your views
+    with only a single line of code.
+
+    There are a number of pre-built transition adjust plugins available in
+    the SproutCore foundation framework:
+
+      SC.View.SMOOTH_ADJUST
+      SC.View.BOUNCE_ADJUST
+      SC.View.SPRING_ADJUST
+
+    To create a custom transition plugin simply create a regular JavaScript
+    object that conforms to the SC.ViewTransitionProtocol protocol.
+
+    NOTE: When creating custom transition adjust plugins, be aware that SC.View
+    will not call the `setup` method of the plugin, only the `run` method.
+
+    @type Object (SC.ViewTransitionProtocol)
+    @default null
+    @since Version 1.10
+  */
+  transitionAdjust: null,
+
+  /**
+    The options for the given `transitionAdjust` plugin.
+
+    These options are specific to the current transition plugin used and are
+    used to modify the transition animation.  To determine what options
+    may be used for a given plugin and to see what the default options are,
+    see the documentation for the transition plugin being used.
+
+    Most transitions will accept a duration and timing option, but may
+    also use other options.  For example, SC.View.BOUNCE_ADJUST accepts options
+    like:
+
+        transitionAdjustOptions: {
+          bounciness: 0.5, // how much the adjustment should bounce back each time
+          bounces: 4, // the number of bounces
+          duration: 0.25,
+          delay: 1
+        }
+
+    @type Object
+    @default null
+    @since Version 1.10
+  */
+  transitionAdjustOptions: null
 
 });
 

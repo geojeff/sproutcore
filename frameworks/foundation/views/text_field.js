@@ -10,6 +10,11 @@ sc_require('system/text_selection') ;
 sc_require('mixins/static_layout') ;
 sc_require('mixins/editable');
 
+SC.AUTOCAPITALIZE_NONE = 'none';
+SC.AUTOCAPITALIZE_SENTENCES = 'sentences';
+SC.AUTOCAPITALIZE_WORDS = 'words';
+SC.AUTOCAPITALIZE_CHARACTERS = 'characters';
+
 /**
   @class
 
@@ -125,15 +130,26 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
   autoCorrect: YES,
 
   /**
-    Whether the browser should automatically capitalize the input.
+    Specifies the autocapitalization behavior.
+
+    Possible values are:
+
+     - `SC.AUTOCAPITALIZE_NONE` -- Do not autocapitalize.
+     - `SC.AUTOCAPITALIZE_SENTENCES` -- Autocapitalize the first letter of each
+       sentence.
+     - `SC.AUTOCAPITALIZE_WORDS` -- Autocapitalize the first letter of each word.
+     - `SC.AUTOCAPITALIZE_CHARACTERS` -- Autocapitalize all characters.
+
+    Boolean values are also supported, with YES interpreted as
+    `SC.AUTOCAPITALIZE_NONE` and NO as `SC.AUTOCAPITALIZE_SENTENCES`.
 
     When `autoCapitalize` is set to `null`, the browser will use
     the system defaults.
 
-    @type Boolean
-    @default YES
+    @type String SC.AUTOCAPITALIZE_NONE|SC.AUTOCAPITALIZE_SENTENCES|SC.AUTOCAPITALIZE_WORDS|SC.AUTOCAPITALIZE_CHARACTERS
+    @default SC.CAPITALIZE_SENTENCES
    */
-  autoCapitalize: YES,
+  autoCapitalize: SC.CAPITALIZE_SENTENCES,
 
   /**
     Localizes the hint if necessary.
@@ -490,7 +506,7 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
         accessoryView;
 
     for (i=0; i<len; i++) {
-      viewProperty = viewProperties[i] ;
+      viewProperty = viewProperties[i];
 
       // Is there an accessory view specified?
       previousView = this['_'+viewProperty] ;
@@ -526,6 +542,13 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
           // instance now.
           accessoryView = this.createChildView(accessoryView);
 
+          // Fix up right accessory views to be right positioned.
+          if (viewProperty === 'rightAccessoryView') {
+            var layout = accessoryView.get('layout');
+
+            accessoryView.adjust({ left: null, right: layout.right || 0 });
+          }
+
           // Add in the "sc-text-field-accessory-view" class name so that the
           // z-index gets set correctly.
           classNames = accessoryView.get('classNames') ;
@@ -543,29 +566,6 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
       }
     }
   }.observes('leftAccessoryView', 'rightAccessoryView'),
-
-  layoutChildViewsIfNeeded: function (isVisible) {
-    // For the right accessory view, adjust the positioning such that the view
-    // is right-justified, unless 'right' is specified.
-    if (!isVisible) isVisible = this.get('isVisibleInWindow') ;
-    if (isVisible && this.get('childViewsNeedLayout')) {
-      var rightAccessoryView = this.get('rightAccessoryView') ;
-      if (rightAccessoryView  &&  rightAccessoryView.get) {
-        var layout = rightAccessoryView.get('layout') ;
-        if (layout) {
-          // Clear out any 'left' value.
-          layout.left = null;
-
-          // Unless the user specified a 'right' value, specify a default to
-          // right-justify the view.
-          if (!layout.right) layout.right = 0 ;
-
-          rightAccessoryView.adjust(layout) ;
-        }
-      }
-    }
-    sc_super() ;
-  },
 
   render: function (context, firstTime) {
     sc_super() ;
@@ -642,12 +642,16 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
 
       spellCheckString = this.get('spellCheckEnabled') ? ' spellcheck="true"' : ' spellcheck="false"';
 
-      if (autoCorrect != null) {
-        autocorrectString = ' autocorrect=' + (!autoCorrect ? '"off"' : '"true"');
+      if (!SC.none(autoCorrect)) {
+        autocorrectString = ' autocorrect=' + (!autoCorrect ? '"off"' : '"on"');
       }
 
-      if (autoCorrect != null) {
-        autocapitalizeString = ' autocapitalize=' + (!autoCapitalize ? '"off"' : '"true"');
+      if (!SC.none(autoCapitalize)) {
+        if (SC.typeOf(autoCapitalize) === 'boolean') {
+          autocapitalizeString = ' autocapitalize=' + (!autoCapitalize ? '"none"' : '"sentences"');
+        } else {
+          autocapitalizeString = ' autocapitalize=' + autoCapitalize;
+        }
       }
 
       if (!isBrowserFocusable) {
@@ -747,16 +751,20 @@ SC.TextFieldView = SC.FieldView.extend(SC.Editable,
         }
       }
 
-      if (autoCorrect != null) {
-        input.attr('autoCorrect', !autoCorrect ? 'off' : 'true');
+      if (!SC.none(autoCorrect)) {
+        input.attr('autocorrect', !autoCorrect ? 'off' : 'on');
       } else {
-        input.attr('autoCorrect', null);
+        input.attr('autocorrect', null);
       }
 
-      if (autoCapitalize != null) {
-        input.attr('autoCapitalize', !autoCapitalize ? 'off' : 'true');
+      if (!SC.none(autoCapitalize)) {
+        if (SC.typeOf(autoCapitalize) == 'boolean') {
+          input.attr('autocapitalize', !autoCapitalize ? 'none' : 'sentences');
+        } else {
+          input.attr('autocapitalize', autoCapitalize);
+        }
       } else {
-        input.attr('autoCapitalize', null);
+        input.attr('autocapitalize', null);
       }
 
       if (!hintOnFocus && SC.platform.input.placeholder) input.attr('placeholder', hint);

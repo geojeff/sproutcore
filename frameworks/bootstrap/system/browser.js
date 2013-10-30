@@ -129,7 +129,7 @@ SC.detectBrowser = function (userAgent, language) {
       conExp = '(?:[\\/:\\::\\s:;])', // Match the connecting character
       numExp = '(\\S+[^\\s:;:\\)]|)', // Match the "number"
       nameAndVersion,
-      osAndVersion,
+      os, osAndVersion,
       override;
 
   // Use the current values if none are provided.
@@ -162,6 +162,7 @@ SC.detectBrowser = function (userAgent, language) {
     // Match the specific names first, avoiding commonly spoofed browsers.
     userAgent.match(new RegExp('(opera|chrome|firefox|android|blackberry)' + conExp + numExp)) ||
     userAgent.match(new RegExp('(ie|safari)' + conExp + numExp)) ||
+    userAgent.match(new RegExp('(trident)')) ||
     ['', SC.BROWSER.unknown, '0'];
 
   // If the device is an iOS device, use SC.BROWSER.safari for browser.name.
@@ -173,7 +174,12 @@ SC.detectBrowser = function (userAgent, language) {
   // If there is no `Version` in Safari, don't use the Safari number since it is
   // the Webkit number.
   else if (nameAndVersion[1] === SC.BROWSER.safari) { nameAndVersion[2] = '0'; }
-
+  else if (nameAndVersion[1] === SC.ENGINE.trident) {
+    // Special handling for IE11 (no 'ie' component, only 'trident' + 'rv')
+    nameAndVersion[1] = SC.BROWSER.ie;
+    this._ieVersion = nameAndVersion[2];
+    nameAndVersion[2] = userAgent.match(new RegExp('(rv)' + conExp + numExp))[2];
+  }
 
   /**
     @name SC.browser.name
@@ -204,9 +210,9 @@ SC.detectBrowser = function (userAgent, language) {
   override = browser.name === SC.BROWSER.ie && engineAndVersion[2] === '0';
   if (override) { engineAndVersion[2] = browser.version; }
 
-  // If a `rv` number is found, use that over the engine number.
+  // If a `rv` number is found, use that over the engine number (except for IE11+ where 'rv' now indicates the browser version).
   override = userAgent.match(new RegExp('(rv)' + conExp + numExp));
-  if (override) { engineAndVersion[2] = override[2]; }
+  if (override && engineAndVersion[1] !== SC.ENGINE.trident) { engineAndVersion[2] = override[2]; }
 
 
   /**
@@ -259,9 +265,10 @@ SC.detectBrowser = function (userAgent, language) {
     [null, SC.BROWSER.unknown, '0'];
 
   // Normalize the os name.
-  if (isIOSDevice) { osAndVersion[1] = SC.OS.ios; }
-  else if (osAndVersion[1] === 'mac os x' || osAndVersion[1] === 'mac os') { osAndVersion[1] = SC.OS.mac; }
-  else if (osAndVersion[1] === 'windows nt') { osAndVersion[1] = SC.OS.win; }
+  if (isIOSDevice) { os = SC.OS.ios; }
+  else if (osAndVersion[1] === 'mac os x' || osAndVersion[1] === 'mac os') { os = SC.OS.mac; }
+  else if (osAndVersion[1] === 'windows nt') { os = SC.OS.win; }
+  else { os = osAndVersion[1]; }
 
   // Normalize the os version.
   osAndVersion[2] = osAndVersion[2] ? osAndVersion[2].replace(/_/g, '.') : '0';
@@ -271,7 +278,7 @@ SC.detectBrowser = function (userAgent, language) {
     @name SC.browser.os
     @type SC.OS|SC.BROWSER.unknown
   */
-  browser.os = osAndVersion[1];
+  browser.os = os;
 
   /**
     @name SC.browser.osVersion
